@@ -31,7 +31,7 @@ export interface LLMCallPayload {
   "gen_ai.request.max_tokens"?: number;
   "gen_ai.request.temperature"?: number;
   "gen_ai.operation.name"?: string;
-  "gen_ai.input.messages"?: unknown[];
+  "gen_ai.input.messages"?: Array<{ role: string; content: unknown }>;
 }
 
 export interface LLMResponsePayload {
@@ -42,7 +42,7 @@ export interface LLMResponsePayload {
   "gen_ai.usage.output_tokens": number;
   "gen_ai.usage.cache_read_input_tokens"?: number;
   "gen_ai.usage.cache_creation_input_tokens"?: number;
-  "gen_ai.output.messages"?: unknown[];
+  "gen_ai.output.messages"?: Array<{ role: string; content: unknown }>;
 }
 
 export interface ToolCallPayload {
@@ -68,21 +68,12 @@ export interface AgentStartPayload {
   "gen_ai.operation.name"?: string;
 }
 
-export interface AgentEndPayload {
-  "gen_ai.agent.name": string;
-  "gen_ai.agent.id": string;
-  "gen_ai.agent.description"?: string;
-  "gen_ai.conversation.id"?: string;
-  "gen_ai.operation.name"?: string;
-  status?: string;
+export interface AgentEndPayload extends AgentStartPayload {
+  status?: "success" | "error" | "cancelled";
 }
 
-export interface AgentHandoffPayload {
-  "gen_ai.agent.name": string;
-  "gen_ai.agent.id": string;
-  "gen_ai.agent.description"?: string;
-  "gen_ai.conversation.id"?: string;
-  "gen_ai.operation.name"?: string;
+export interface AgentHandoffPayload extends AgentStartPayload {
+  // AgentWatch-specific fields — no OTel equivalent for handoff targets
   targetAgentId: string;
   targetAgentName?: string;
 }
@@ -110,7 +101,7 @@ export interface TracePayload {
 }
 
 export interface MemoryReadPayload {
-  key?: string;
+  key: string;
   query?: string;
   result?: unknown;
 }
@@ -128,7 +119,7 @@ export interface CustomPayload {
 // AgentWatchEvent
 // ---------------------------------------------------------------------------
 
-export interface AgentWatchEvent {
+export interface AgentWatchEventBase {
   id: string;
   agentId: string;
   sessionId: string;
@@ -143,13 +134,30 @@ export interface AgentWatchEvent {
   // Event structure
   parentId?: string;
   sequence: number;
-  type: EventType;
   level: EventLevel;
   timestamp: number;
   durationMs?: number;
-  payload: Record<string, unknown>;
   meta?: Record<string, unknown>;
 }
+
+export type AgentWatchEvent = AgentWatchEventBase &
+  (
+    | { type: "input"; payload: InputPayload }
+    | { type: "output"; payload: OutputPayload }
+    | { type: "tool_call"; payload: ToolCallPayload }
+    | { type: "tool_result"; payload: ToolResultPayload }
+    | { type: "llm_call"; payload: LLMCallPayload }
+    | { type: "llm_response"; payload: LLMResponsePayload }
+    | { type: "error"; payload: ErrorPayload }
+    | { type: "trace"; payload: TracePayload }
+    | { type: "memory_read"; payload: MemoryReadPayload }
+    | { type: "memory_write"; payload: MemoryWritePayload }
+    | { type: "agent_start"; payload: AgentStartPayload }
+    | { type: "agent_end"; payload: AgentEndPayload }
+    | { type: "agent_handoff"; payload: AgentHandoffPayload }
+    | { type: "custom"; payload: CustomPayload }
+    | { type: string & {}; payload: Record<string, unknown> }
+  );
 
 // ---------------------------------------------------------------------------
 // Transport
