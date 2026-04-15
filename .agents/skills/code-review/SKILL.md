@@ -2,6 +2,13 @@
 
 You are reviewing a pull request for the AgentWatch monorepo.
 
+## Instructions
+
+1. Read the full PR diff.
+2. Review against the checklist below.
+3. Post inline review comments on specific lines where you find issues.
+4. **Always post a PR review** using the GitHub review API — use "APPROVE" if no issues, "REQUEST_CHANGES" if there are blocking issues, or "COMMENT" for non-blocking suggestions. Include a brief summary of what you reviewed.
+
 ## Review checklist
 
 1. **Conventional commits** — PR title must follow `type(scope): description` format. Valid types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`. Scope is optional but encouraged (e.g., `sdk`, `server`, `web`, `types`).
