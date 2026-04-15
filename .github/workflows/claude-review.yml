@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
   id-token: write
 
 jobs:
@@ -17,21 +18,94 @@ jobs:
       (
         github.event_name == 'pull_request' &&
         github.event.pull_request.draft == false &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+        github.event.pull_request.head.repo.full_name == github.repository
       ) ||
       (
         github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        contains(github.event.comment.body, '@claude')
       )
     runs-on: ubuntu-latest
     steps:
+      - name: Check actor permission
+        id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const username = context.eventName === 'pull_request'
+              ? context.payload.pull_request.user.login
+              : context.payload.comment.user.login;
+
+            let permission = 'none';
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username,
+              });
+              permission = data.permission;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            const allowed = ['write', 'admin'].includes(permission);
+            core.info(`User ${username}: permission=${permission}, allowed=${allowed}`);
+            core.setOutput('allowed', allowed ? 'true' : 'false');
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        if: steps.check.outputs.allowed == 'true'
         with:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@5fb899572b81d2bb648d4d187173a2f423a9677c # v1.0.96
+        if: steps.check.outputs.allowed == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          classify_inline_comments: 'false'
+          include_fix_links: 'false'
+          claude_args: '--allowedTools "Bash(gh:*)"'
+          prompt: |
+            You are a code reviewer. Review the PR diff thoroughly for:
+            - Bugs and logic errors
+            - Security vulnerabilities
+            - Missing error handling and unhandled edge cases
+            - Type safety issues, `any` usage, and unsafe casts
+            - Scope creep — flag changes that don't belong in the PR
+
+            Follow the project's review guidelines in CLAUDE.md. Only review changed code.
+            Be concise. Only flag real issues, not style preferences covered by linters or formatters.
+
+            ## Severity
+
+            Classify each finding as one of:
+            - **blocking**: Bugs, security issues, logic errors, missing error handling, unsafe casts,
+              unhandled edge cases. These MUST be fixed before merge.
+            - **nit**: Style suggestions, naming improvements, minor refactoring ideas. Optional.
+
+            ## How to report findings
+
+            1. Post each finding as an inline comment on the specific diff line.
+               Prefix each comment with `[blocking]` or `[nit]`.
+
+            2. After posting all inline comments, submit a formal PR review using `gh api`.
+               Determine the review event based on your findings:
+               - If ANY blocking findings exist → `REQUEST_CHANGES`
+               - If only nits or no findings → `COMMENT`
+
+               Use this command (substitute the actual values):
+               ```
+               gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+                 -f body="<1-2 sentence summary of overall assessment>" \
+                 -f event="<REQUEST_CHANGES or COMMENT>"
+               ```
+
+               The PR number is available from the pull request context. Use `gh pr view --json number -q .number`
+               if needed, or extract it from the event context.
+
+            ## Rules
+
+            - Do NOT approve PRs
+            - Do NOT push code or make changes to the repository
+            - Do NOT comment on formatting or style that linters handle
+            - Do NOT post a separate summary comment — the review body IS the summary
+            - Keep comments actionable and specific
