@@ -13,10 +13,6 @@ AgentWatch is an observability SDK and dashboard for AI agent pipelines. It is s
 - **TypeScript** throughout — strict mode, ES2022 target, NodeNext resolution
 - **Build order**: types → sdk → server/web (enforced by Turborepo `^build`)
 
-## Skills
+## See also
 
-Agent skills live in `.agents/skills/`. Each skill has a `SKILL.md` with instructions.
-
-| Skill | Path | Purpose |
-|-------|------|---------|
-| Code Review | `.agents/skills/code-review/SKILL.md` | PR review guidelines |
+- `CLAUDE.md` — project instructions for Claude Code and Claude PR reviews
