@@ -100,11 +100,9 @@ export interface TracePayload {
   data?: Record<string, unknown>;
 }
 
-export interface MemoryReadPayload {
-  key: string;
-  query?: string;
-  result?: unknown;
-}
+export type MemoryReadPayload =
+  | { key: string; query?: string; result?: unknown }
+  | { key?: string; query: string; result?: unknown };
 
 export interface MemoryWritePayload {
   key?: string;
@@ -199,7 +197,7 @@ export interface SessionFilters {
 export interface RunFilters {
   pipelineDefinitionId?: string;
   projectId?: string;
-  status?: string;
+  status?: "running" | "completed" | "failed";
   since?: number;
   until?: number;
   limit?: number;
@@ -259,6 +257,7 @@ export interface ProjectSummary {
 // EventStore
 // ---------------------------------------------------------------------------
 
+// Synchronous — assumes a synchronous store (e.g. better-sqlite3)
 export interface EventStore {
   insert(events: AgentWatchEvent[]): void;
   getEvents(filters: EventFilters): AgentWatchEvent[];
