@@ -5,7 +5,7 @@ import type {
   AlertRule,
   PanelDefinition,
   PanelQuery,
-} from "../config";
+} from "../index";
 
 describe("config types", () => {
   it("AlertRule accepts all valid metric types", () => {

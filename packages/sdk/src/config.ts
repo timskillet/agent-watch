@@ -28,7 +28,7 @@ export interface PanelDefinition {
 // These serve different layers and may diverge as the config DSL evolves.
 export interface PanelQuery {
   tool?: string;
-  metric?:
+  metric:
     | "session.cost"
     | "session.duration"
     | "tool.failure_rate"
