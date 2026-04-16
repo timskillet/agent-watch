@@ -45,8 +45,16 @@ export function mergeHookConfig(settingsPath: string): void {
   try {
     const raw = readFileSync(settingsPath, "utf-8");
     settings = JSON.parse(raw);
-  } catch {
-    // File does not exist or invalid JSON -- start fresh
+  } catch (err: unknown) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      // File does not exist — start fresh
+    } else {
+      throw err;
+    }
   }
 
   if (!settings.hooks) {

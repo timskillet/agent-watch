@@ -20,7 +20,7 @@ export async function createServer(options: ServerOptions) {
 
   registerHooksRoute(app, store);
 
-  const address = await app.listen({ port, host: "0.0.0.0" });
+  const address = await app.listen({ port, host: "127.0.0.1" });
 
   const shutdown = async () => {
     await app.close();

@@ -91,9 +91,11 @@ export function normalizeHookPayload(
     }
 
     case "PostToolUse": {
-      const parentId = hook.tool_use_id
-        ? preToolEventIds.get(hook.tool_use_id)
-        : undefined;
+      let parentId: string | undefined;
+      if (hook.tool_use_id) {
+        parentId = preToolEventIds.get(hook.tool_use_id);
+        preToolEventIds.delete(hook.tool_use_id);
+      }
       return {
         ...base(hook),
         type: "tool_result",
@@ -112,9 +114,11 @@ export function normalizeHookPayload(
     }
 
     case "PostToolUseFailure": {
-      const parentId = hook.tool_use_id
-        ? preToolEventIds.get(hook.tool_use_id)
-        : undefined;
+      let parentId: string | undefined;
+      if (hook.tool_use_id) {
+        parentId = preToolEventIds.get(hook.tool_use_id);
+        preToolEventIds.delete(hook.tool_use_id);
+      }
       return {
         ...base(hook, { level: "error" }),
         type: "tool_error",

@@ -179,10 +179,18 @@ export class SQLiteEventStore implements EventStore {
 
     const where =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limit = filter.limit ? `LIMIT ${filter.limit}` : "";
-    const offset = filter.offset ? `OFFSET ${filter.offset}` : "";
 
-    const sql = `SELECT * FROM events ${where} ORDER BY timestamp ASC ${limit} ${offset}`;
+    let limitOffset = "";
+    if (filter.limit != null) {
+      limitOffset += " LIMIT @limit";
+      params.limit = filter.limit;
+    }
+    if (filter.offset != null) {
+      limitOffset += " OFFSET @offset";
+      params.offset = filter.offset;
+    }
+
+    const sql = `SELECT * FROM events ${where} ORDER BY timestamp ASC${limitOffset}`;
     const rows = this.db.prepare(sql).all(params) as EventRow[];
     return rows.map(rowToEvent);
   }

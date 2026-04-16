@@ -117,4 +117,11 @@ describe("mergeHookConfig", () => {
     expect(settings.hooks.PostToolUse[0].hooks[0].async).toBe(true);
     expect(settings.hooks.Stop[0].hooks[0].async).toBe(true);
   });
+
+  it("throws on corrupt JSON instead of silently overwriting", () => {
+    const settingsPath = join(tmpDir, "settings.json");
+    writeFileSync(settingsPath, "{ invalid json");
+
+    expect(() => mergeHookConfig(settingsPath)).toThrow();
+  });
 });

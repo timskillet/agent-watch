@@ -13,10 +13,14 @@ if (args.includes("init")) {
 }
 
 const portFlag = args.indexOf("--port");
-const port =
-  portFlag !== -1 && args[portFlag + 1]
-    ? parseInt(args[portFlag + 1], 10)
-    : 4318;
+let port = 4318;
+if (portFlag !== -1 && args[portFlag + 1]) {
+  port = parseInt(args[portFlag + 1], 10);
+  if (isNaN(port) || port < 1 || port > 65535) {
+    console.error(`Invalid port: ${args[portFlag + 1]}. Must be 1-65535.`);
+    process.exit(1);
+  }
+}
 
 const home = process.env.HOME ?? process.env.USERPROFILE ?? "~";
 const dbDir = join(home, ".agentwatch");
