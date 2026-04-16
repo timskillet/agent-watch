@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from "vitest";
 import Fastify from "fastify";
 import type { AgentWatchEvent } from "@agentwatch/types";
 import { SQLiteEventStore } from "../store.js";
@@ -172,7 +180,7 @@ describe("EventStore query methods", () => {
     seedTestData(store);
   });
 
-  afterAll(() => {
+  afterEach(() => {
     store.close();
   });
 
@@ -552,5 +560,25 @@ describe("Query API routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(3);
+  });
+
+  // --- Input validation ---
+
+  it("returns 400 for invalid status", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs?status=bogus",
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Invalid status/);
+  });
+
+  it("returns 400 for invalid ingestionSource", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/sessions?ingestionSource=bogus",
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Invalid ingestion_source/);
   });
 });

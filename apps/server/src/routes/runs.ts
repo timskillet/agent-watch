@@ -1,12 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { RunFilter, IngestionSource } from "@agentwatch/types";
+import type { RunFilter } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
-
-function toNum(val: string | undefined): number | undefined {
-  if (val == null) return undefined;
-  const n = Number(val);
-  return Number.isFinite(n) ? n : undefined;
-}
+import { toNum, validateStatus, validateIngestionSource } from "./utils.js";
 
 export function registerRunsRoute(
   app: FastifyInstance,
@@ -34,11 +29,16 @@ export function registerRunsRoute(
     "/api/runs",
     async (req, reply) => {
       const q = req.query;
+      const status = validateStatus(q.status, reply);
+      if (status === false) return;
+      const ingestionSource = validateIngestionSource(q.ingestionSource, reply);
+      if (ingestionSource === false) return;
+
       const filter: RunFilter = {
         pipelineDefinitionId: q.pipelineDefinitionId,
         projectId: q.projectId,
-        ingestionSource: q.ingestionSource as IngestionSource | undefined,
-        status: q.status as RunFilter["status"],
+        ingestionSource,
+        status,
         since: toNum(q.since),
         until: toNum(q.until),
         limit: toNum(q.limit),

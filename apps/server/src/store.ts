@@ -225,7 +225,15 @@ export class SQLiteEventStore implements EventStore {
     const where =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const limitOffset = applyPagination(params, filter);
+    let limitOffset = "";
+    if (filter.limit != null) {
+      params.limit = filter.limit;
+      limitOffset += " LIMIT @limit";
+    }
+    if (filter.offset != null) {
+      params.offset = filter.offset;
+      limitOffset += " OFFSET @offset";
+    }
 
     const sql = `SELECT * FROM events ${where} ORDER BY timestamp ASC${limitOffset}`;
     const rows = this.db.prepare(sql).all(params) as EventRow[];
@@ -234,6 +242,7 @@ export class SQLiteEventStore implements EventStore {
 
   getSessions(filter: SessionFilter): SessionSummary[] {
     const conditions: string[] = [];
+    const havingConditions: string[] = [];
     const params: Record<string, unknown> = {};
 
     if (filter.pipelineDefinitionId) {
@@ -257,16 +266,20 @@ export class SQLiteEventStore implements EventStore {
       params.ingestionSource = filter.ingestionSource;
     }
     if (filter.since) {
-      conditions.push("timestamp >= @since");
+      havingConditions.push("MIN(timestamp) >= @since");
       params.since = filter.since;
     }
     if (filter.until) {
-      conditions.push("timestamp <= @until");
+      havingConditions.push("MAX(timestamp) <= @until");
       params.until = filter.until;
     }
 
     const where =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const having =
+      havingConditions.length > 0
+        ? `HAVING ${havingConditions.join(" AND ")}`
+        : "";
     const limitOffset = applyPagination(params, filter);
 
     const sql = `
@@ -284,6 +297,7 @@ export class SQLiteEventStore implements EventStore {
       FROM events
       ${where}
       GROUP BY session_id
+      ${having}
       ORDER BY start_time DESC
       ${limitOffset}
     `;
@@ -318,6 +332,7 @@ export class SQLiteEventStore implements EventStore {
 
   getRuns(filter: RunFilter): PipelineRunSummary[] {
     const innerConditions: string[] = ["pipeline_id IS NOT NULL"];
+    const innerHaving: string[] = [];
     const params: Record<string, unknown> = {};
 
     if (filter.pipelineDefinitionId) {
@@ -333,15 +348,17 @@ export class SQLiteEventStore implements EventStore {
       params.ingestionSource = filter.ingestionSource;
     }
     if (filter.since) {
-      innerConditions.push("timestamp >= @since");
+      innerHaving.push("MIN(timestamp) >= @since");
       params.since = filter.since;
     }
     if (filter.until) {
-      innerConditions.push("timestamp <= @until");
+      innerHaving.push("MAX(timestamp) <= @until");
       params.until = filter.until;
     }
 
     const innerWhere = `WHERE ${innerConditions.join(" AND ")}`;
+    const innerHavingClause =
+      innerHaving.length > 0 ? `HAVING ${innerHaving.join(" AND ")}` : "";
 
     const outerConditions: string[] = [];
     if (filter.status) {
@@ -372,6 +389,7 @@ export class SQLiteEventStore implements EventStore {
         FROM events
         ${innerWhere}
         GROUP BY pipeline_id
+        ${innerHavingClause}
       )
       SELECT *,
         CASE

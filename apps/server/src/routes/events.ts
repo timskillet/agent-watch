@@ -1,17 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type {
-  EventFilter,
-  EventType,
-  EventLevel,
-  IngestionSource,
-} from "@agentwatch/types";
+import type { EventFilter, EventType, EventLevel } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
-
-function toNum(val: string | undefined): number | undefined {
-  if (val == null) return undefined;
-  const n = Number(val);
-  return Number.isFinite(n) ? n : undefined;
-}
+import { toNum, validateIngestionSource } from "./utils.js";
 
 function splitOrSingle<T extends string>(
   val: string | undefined,
@@ -29,13 +19,16 @@ export function registerEventsRoute(
     "/api/events",
     async (req, reply) => {
       const q = req.query;
+      const ingestionSource = validateIngestionSource(q.ingestionSource, reply);
+      if (ingestionSource === false) return;
+
       const filter: EventFilter = {
         sessionId: q.sessionId,
         agentId: q.agentId,
         pipelineId: q.pipelineId,
         pipelineDefinitionId: q.pipelineDefinitionId,
         projectId: q.projectId,
-        ingestionSource: q.ingestionSource as IngestionSource | undefined,
+        ingestionSource,
         type: splitOrSingle<EventType>(q.type),
         level: splitOrSingle<EventLevel>(q.level),
         since: toNum(q.since),

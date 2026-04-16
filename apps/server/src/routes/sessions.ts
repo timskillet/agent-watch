@@ -1,12 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { SessionFilter, IngestionSource } from "@agentwatch/types";
+import type { SessionFilter } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
-
-function toNum(val: string | undefined): number | undefined {
-  if (val == null) return undefined;
-  const n = Number(val);
-  return Number.isFinite(n) ? n : undefined;
-}
+import { toNum, validateIngestionSource } from "./utils.js";
 
 export function registerSessionsRoute(
   app: FastifyInstance,
@@ -16,12 +11,15 @@ export function registerSessionsRoute(
     "/api/sessions",
     async (req, reply) => {
       const q = req.query;
+      const ingestionSource = validateIngestionSource(q.ingestionSource, reply);
+      if (ingestionSource === false) return;
+
       const filter: SessionFilter = {
         agentId: q.agentId,
         pipelineId: q.pipelineId,
         pipelineDefinitionId: q.pipelineDefinitionId,
         projectId: q.projectId,
-        ingestionSource: q.ingestionSource as IngestionSource | undefined,
+        ingestionSource,
         since: toNum(q.since),
         until: toNum(q.until),
         limit: toNum(q.limit),
