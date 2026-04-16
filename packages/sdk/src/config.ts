@@ -24,6 +24,8 @@ export interface PanelDefinition {
   query: PanelQuery;
 }
 
+// Intentionally separate from @agentwatch/types PanelQuery (store-level).
+// These serve different layers and may diverge as the config DSL evolves.
 export interface PanelQuery {
   tool?: string;
   metric?:
