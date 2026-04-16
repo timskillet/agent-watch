@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { SQLiteEventStore } from "./store.js";
 import { registerHooksRoute } from "./ingest/hooks.js";
+import { registerOtlpRoute } from "./ingest/otlp.js";
 
 export interface ServerOptions {
   port: number;
@@ -19,6 +20,7 @@ export async function createServer(options: ServerOptions) {
   });
 
   registerHooksRoute(app, store);
+  registerOtlpRoute(app, store);
 
   const address = await app.listen({ port, host: "127.0.0.1" });
 
