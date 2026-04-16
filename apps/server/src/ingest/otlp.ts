@@ -1,12 +1,15 @@
 import { randomUUID } from "crypto";
 import type { FastifyInstance } from "fastify";
-import type { AgentWatchEvent } from "@agentwatch/types";
+import type {
+  AgentWatchEvent,
+  AgentWatchEventBase,
+  EventLevel,
+} from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
 import { nextSequence } from "./sequence.js";
 
 // ---------------------------------------------------------------------------
-// OTLP JSON wire-format types (stable spec — defined locally to avoid
-// depending on @opentelemetry/otlp-transformer's internal/experimental exports)
+// OTLP JSON wire-format types (stable spec, defined locally)
 // ---------------------------------------------------------------------------
 
 export interface OtlpExportTraceRequest {
@@ -112,10 +115,32 @@ function collectAttrs(
 // normalizeOtelSpan
 // ---------------------------------------------------------------------------
 
+function parseNanos(value: string): bigint | null {
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function event(
+  base: AgentWatchEventBase,
+  type: AgentWatchEvent["type"],
+  payload: AgentWatchEvent["payload"],
+): AgentWatchEvent {
+  return { ...base, type, payload } as AgentWatchEvent;
+}
+
 export function normalizeOtelSpan(
   span: OtlpSpan,
   resource: OtlpResource | undefined,
 ): AgentWatchEvent[] {
+  const startNano = parseNanos(span.startTimeUnixNano);
+  const endNano = parseNanos(span.endTimeUnixNano);
+  if (startNano === null || endNano === null) {
+    return [];
+  }
+
   const operationName = getAttr(span.attributes, "gen_ai.operation.name");
   const resourceAttrs = resource?.attributes;
 
@@ -127,12 +152,11 @@ export function normalizeOtelSpan(
     "unknown";
   const pipelineDefinitionId = getAttr(resourceAttrs, "service.name");
 
-  const startNano = BigInt(span.startTimeUnixNano);
-  const endNano = BigInt(span.endTimeUnixNano);
   const timestamp = Number(startNano / 1_000_000n);
   const durationMs = Number((endNano - startNano) / 1_000_000n);
 
   const isError = span.status?.code === 2;
+  const level: EventLevel = isError ? "error" : "info";
 
   const baseMeta: Record<string, unknown> = {
     ingestion_source: "otlp",
@@ -140,20 +164,17 @@ export function normalizeOtelSpan(
     otel_span_id: span.spanId,
   };
 
-  function base(
-    overrides?: Partial<AgentWatchEvent>,
-  ): Omit<AgentWatchEvent, "type" | "payload"> {
+  function base(levelOverride?: EventLevel): AgentWatchEventBase {
     return {
       id: randomUUID(),
       agentId,
       sessionId,
       pipelineDefinitionId,
       sequence: nextSequence(sessionId),
-      level: isError ? "error" : "info",
+      level: levelOverride ?? level,
       timestamp,
       durationMs,
       meta: { ...baseMeta },
-      ...overrides,
     };
   }
 
@@ -169,13 +190,7 @@ export function normalizeOtelSpan(
       "exception.stacktrace",
     );
 
-    return [
-      {
-        ...base(),
-        type: "error",
-        payload: { message: errorMsg, stack: errorStack },
-      } as AgentWatchEvent,
-    ];
+    return [event(base(), "error", { message: errorMsg, stack: errorStack })];
   }
 
   switch (operationName) {
@@ -187,20 +202,12 @@ export function normalizeOtelSpan(
         getNumAttr(span.attributes, "gen_ai.usage.output_tokens") ?? 0;
 
       return [
-        {
-          ...base(),
-          type: "llm_call",
-          payload: { "gen_ai.request.model": model },
-        } as AgentWatchEvent,
-        {
-          ...base(),
-          type: "llm_response",
-          payload: {
-            "gen_ai.response.model": model,
-            "gen_ai.usage.input_tokens": inputTokens,
-            "gen_ai.usage.output_tokens": outputTokens,
-          },
-        } as AgentWatchEvent,
+        event(base(), "llm_call", { "gen_ai.request.model": model }),
+        event(base(), "llm_response", {
+          "gen_ai.response.model": model,
+          "gen_ai.usage.input_tokens": inputTokens,
+          "gen_ai.usage.output_tokens": outputTokens,
+        }),
       ];
     }
 
@@ -221,24 +228,16 @@ export function normalizeOtelSpan(
         );
 
         return [
-          {
-            ...base(),
-            type: "tool_call",
-            payload: {
-              "gen_ai.tool.name": toolName,
-              "gen_ai.tool.call.id": toolCallId,
-            },
-          } as AgentWatchEvent,
-          {
-            ...base({ level: "error" }),
-            type: "tool_error",
-            payload: {
-              "gen_ai.tool.name": toolName,
-              "gen_ai.tool.call.id": toolCallId,
-              error: errorMsg,
-              stack: errorStack,
-            },
-          } as AgentWatchEvent,
+          event(base(), "tool_call", {
+            "gen_ai.tool.name": toolName,
+            "gen_ai.tool.call.id": toolCallId,
+          }),
+          event(base("error"), "tool_error", {
+            "gen_ai.tool.name": toolName,
+            "gen_ai.tool.call.id": toolCallId,
+            error: errorMsg,
+            stack: errorStack,
+          }),
         ];
       }
 
@@ -246,24 +245,16 @@ export function normalizeOtelSpan(
       const toolOutput = getAttr(span.attributes, "gen_ai.tool.output");
 
       return [
-        {
-          ...base(),
-          type: "tool_call",
-          payload: {
-            "gen_ai.tool.name": toolName,
-            "gen_ai.tool.call.id": toolCallId,
-            input: toolInput,
-          },
-        } as AgentWatchEvent,
-        {
-          ...base(),
-          type: "tool_result",
-          payload: {
-            "gen_ai.tool.name": toolName,
-            "gen_ai.tool.call.id": toolCallId,
-            output: toolOutput,
-          },
-        } as AgentWatchEvent,
+        event(base(), "tool_call", {
+          "gen_ai.tool.name": toolName,
+          "gen_ai.tool.call.id": toolCallId,
+          input: toolInput,
+        }),
+        event(base(), "tool_result", {
+          "gen_ai.tool.name": toolName,
+          "gen_ai.tool.call.id": toolCallId,
+          output: toolOutput,
+        }),
       ];
     }
 
@@ -272,24 +263,14 @@ export function normalizeOtelSpan(
         getAttr(span.attributes, "gen_ai.agent.name") ?? agentId;
       const agentIdAttr =
         getAttr(span.attributes, "gen_ai.agent.id") ?? agentName;
+      const agentPayload = {
+        "gen_ai.agent.name": agentName,
+        "gen_ai.agent.id": agentIdAttr,
+      };
 
       return [
-        {
-          ...base(),
-          type: "agent_start",
-          payload: {
-            "gen_ai.agent.name": agentName,
-            "gen_ai.agent.id": agentIdAttr,
-          },
-        } as AgentWatchEvent,
-        {
-          ...base(),
-          type: "agent_end",
-          payload: {
-            "gen_ai.agent.name": agentName,
-            "gen_ai.agent.id": agentIdAttr,
-          },
-        } as AgentWatchEvent,
+        event(base(), "agent_start", agentPayload),
+        event(base(), "agent_end", agentPayload),
       ];
     }
 
@@ -300,27 +281,16 @@ export function normalizeOtelSpan(
         getAttr(span.attributes, "gen_ai.agent.id") ?? agentName;
 
       return [
-        {
-          ...base(),
-          type: "agent_start",
-          payload: {
-            "gen_ai.agent.name": agentName,
-            "gen_ai.agent.id": agentIdAttr,
-          },
-        } as AgentWatchEvent,
+        event(base(), "agent_start", {
+          "gen_ai.agent.name": agentName,
+          "gen_ai.agent.id": agentIdAttr,
+        }),
       ];
     }
 
     default: {
-      // Unknown operation → trace event with all attributes
       const allAttrs = collectAttrs(span.attributes);
-      return [
-        {
-          ...base(),
-          type: "trace",
-          payload: { message: span.name, data: allAttrs },
-        } as AgentWatchEvent,
-      ];
+      return [event(base(), "trace", { message: span.name, data: allAttrs })];
     }
   }
 }

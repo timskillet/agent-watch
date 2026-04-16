@@ -457,5 +457,22 @@ describe("normalizeOtelSpan", () => {
       // Next event in same session → sequence 3
       expect(events2[0].sequence).toBe(3);
     });
+
+    it("skips spans with malformed timestamps", () => {
+      const span = makeSpan({
+        startTimeUnixNano: "not-a-number",
+        endTimeUnixNano: "1700000001500000000",
+        attributes: [
+          { key: "gen_ai.operation.name", value: { stringValue: "chat" } },
+          {
+            key: "gen_ai.request.model",
+            value: { stringValue: "gpt-4o" },
+          },
+        ],
+      });
+
+      const events = normalizeOtelSpan(span, defaultResource);
+      expect(events).toHaveLength(0);
+    });
   });
 });
