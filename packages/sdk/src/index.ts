@@ -1,11 +1,36 @@
+// ---------------------------------------------------------------------------
+// Config types (SDK-specific)
+// ---------------------------------------------------------------------------
+
 export type {
-  // Event types
+  AgentWatchConfig,
+  AlertRule,
+  AnnotationRule,
+  PanelDefinition,
+  PanelQuery,
+} from "./config.js";
+
+// ---------------------------------------------------------------------------
+// defineConfig — identity function for TypeScript inference
+// ---------------------------------------------------------------------------
+
+import type { AgentWatchConfig } from "./config.js";
+
+export function defineConfig(config: AgentWatchConfig): AgentWatchConfig {
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Re-export all types from @agentwatch/types for convenience
+// (PanelQuery intentionally omitted — the SDK exports its own from ./config)
+// ---------------------------------------------------------------------------
+
+export type {
   EventType,
   EventLevel,
   IngestionSource,
   AgentWatchEvent,
   AgentWatchEventBase,
-  // Payloads
   LLMCallPayload,
   LLMResponsePayload,
   ToolCallPayload,
@@ -20,7 +45,6 @@ export type {
   ErrorPayload,
   TracePayload,
   CustomPayload,
-  // Filters & summaries
   EventFilter,
   SessionFilter,
   RunFilter,
@@ -28,11 +52,9 @@ export type {
   PipelineRunSummary,
   PipelineDefinitionSummary,
   ProjectSummary,
-  // Store
   EventStore,
   Transport,
   RunDetail,
   RunComparison,
-  PanelQuery,
   PanelResult,
 } from "@agentwatch/types";
