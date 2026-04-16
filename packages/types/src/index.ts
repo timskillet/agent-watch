@@ -3,23 +3,25 @@
 // ---------------------------------------------------------------------------
 
 export type EventType =
-  | "input"
-  | "output"
+  | "user_prompt"
   | "tool_call"
   | "tool_result"
+  | "tool_error"
   | "llm_call"
   | "llm_response"
-  | "error"
-  | "trace"
-  | "memory_read"
-  | "memory_write"
   | "agent_start"
   | "agent_end"
   | "agent_handoff"
+  | "session_start"
+  | "session_end"
+  | "error"
+  | "trace"
   | "custom"
   | (string & {}); // extensible — custom event types without modifying this package
 
 export type EventLevel = "debug" | "info" | "warn" | "error";
+
+export type IngestionSource = "claude_code_hook" | "otlp";
 
 // ---------------------------------------------------------------------------
 // Payload interfaces — OTel GenAI Semantic Convention naming
@@ -78,14 +80,27 @@ export interface AgentHandoffPayload extends AgentStartPayload {
   targetAgentName?: string;
 }
 
-export interface InputPayload {
-  content: unknown;
-  format?: string;
+export interface SessionStartPayload {
+  cwd: string;
+  project?: string;
 }
 
-export interface OutputPayload {
-  content: unknown;
-  format?: string;
+export interface SessionEndPayload {
+  durationMs?: number;
+  totalCost?: number;
+  totalTokens?: number;
+}
+
+export interface UserPromptPayload {
+  promptLength: number;
+  // Never store actual prompt content
+}
+
+export interface ToolErrorPayload {
+  "gen_ai.tool.name": string;
+  "gen_ai.tool.call.id"?: string;
+  error: string;
+  stack?: string;
 }
 
 export interface ErrorPayload {
@@ -98,15 +113,6 @@ export interface ErrorPayload {
 export interface TracePayload {
   message: string;
   data?: Record<string, unknown>;
-}
-
-export type MemoryReadPayload =
-  | { key: string; query?: string; result?: unknown }
-  | { key?: string; query: string; result?: unknown };
-
-export interface MemoryWritePayload {
-  key?: string;
-  content: unknown;
 }
 
 export interface CustomPayload {
@@ -140,19 +146,19 @@ export interface AgentWatchEventBase {
 
 export type AgentWatchEvent = AgentWatchEventBase &
   (
-    | { type: "input"; payload: InputPayload }
-    | { type: "output"; payload: OutputPayload }
+    | { type: "user_prompt"; payload: UserPromptPayload }
     | { type: "tool_call"; payload: ToolCallPayload }
     | { type: "tool_result"; payload: ToolResultPayload }
+    | { type: "tool_error"; payload: ToolErrorPayload }
     | { type: "llm_call"; payload: LLMCallPayload }
     | { type: "llm_response"; payload: LLMResponsePayload }
-    | { type: "error"; payload: ErrorPayload }
-    | { type: "trace"; payload: TracePayload }
-    | { type: "memory_read"; payload: MemoryReadPayload }
-    | { type: "memory_write"; payload: MemoryWritePayload }
     | { type: "agent_start"; payload: AgentStartPayload }
     | { type: "agent_end"; payload: AgentEndPayload }
     | { type: "agent_handoff"; payload: AgentHandoffPayload }
+    | { type: "session_start"; payload: SessionStartPayload }
+    | { type: "session_end"; payload: SessionEndPayload }
+    | { type: "error"; payload: ErrorPayload }
+    | { type: "trace"; payload: TracePayload }
     | { type: "custom"; payload: CustomPayload }
     | { type: string & {}; payload: Record<string, unknown> }
   );
@@ -169,12 +175,13 @@ export interface Transport {
 // Filters
 // ---------------------------------------------------------------------------
 
-export interface EventFilters {
+export interface EventFilter {
   sessionId?: string;
   agentId?: string;
   pipelineId?: string;
   pipelineDefinitionId?: string;
   projectId?: string;
+  ingestionSource?: IngestionSource;
   type?: EventType | EventType[];
   level?: EventLevel | EventLevel[];
   since?: number;
@@ -183,20 +190,22 @@ export interface EventFilters {
   offset?: number;
 }
 
-export interface SessionFilters {
+export interface SessionFilter {
   agentId?: string;
   pipelineId?: string;
   pipelineDefinitionId?: string;
   projectId?: string;
+  ingestionSource?: IngestionSource;
   since?: number;
   until?: number;
   limit?: number;
   offset?: number;
 }
 
-export interface RunFilters {
+export interface RunFilter {
   pipelineDefinitionId?: string;
   projectId?: string;
+  ingestionSource?: IngestionSource;
   status?: "running" | "completed" | "failed";
   since?: number;
   until?: number;
@@ -208,14 +217,6 @@ export interface RunFilters {
 // Summary types
 // ---------------------------------------------------------------------------
 
-export interface AgentSummary {
-  agentId: string;
-  name?: string;
-  eventCount: number;
-  firstSeen: number;
-  lastSeen: number;
-}
-
 export interface SessionSummary {
   sessionId: string;
   agentId: string;
@@ -226,6 +227,7 @@ export interface SessionSummary {
   startTime: number;
   endTime?: number;
   durationMs?: number;
+  ingestionSource?: IngestionSource;
 }
 
 export interface PipelineRunSummary {
@@ -238,6 +240,7 @@ export interface PipelineRunSummary {
   endTime?: number;
   durationMs?: number;
   status: "running" | "completed" | "failed";
+  ingestionSource?: IngestionSource;
 }
 
 export interface PipelineDefinitionSummary {
@@ -254,14 +257,57 @@ export interface ProjectSummary {
 }
 
 // ---------------------------------------------------------------------------
+// EventStore query/result types
+// ---------------------------------------------------------------------------
+
+export interface RunDetail {
+  pipelineId: string;
+  pipelineDefinitionId?: string;
+  projectId?: string;
+  status: "running" | "completed" | "failed";
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+  agents: string[];
+  /** Eagerly loaded — suitable for short-lived runs. Use EventStore.getEvents() with a filter for large pipelines. */
+  events: AgentWatchEvent[];
+}
+
+export interface RunComparison {
+  a: RunDetail;
+  b: RunDetail;
+}
+
+export interface PanelQuery {
+  tool?: string;
+  metric?:
+    | "session.cost"
+    | "session.duration"
+    | "tool.failure_rate"
+    | "token.usage";
+  groupBy?: "day" | "tool_name" | "command_prefix" | "session_tag";
+  range?: "7d" | "30d" | "90d";
+  limit?: number;
+}
+
+export interface PanelResult {
+  rows: Array<Record<string, unknown>>;
+}
+
+// ---------------------------------------------------------------------------
 // EventStore
 // ---------------------------------------------------------------------------
 
 // Synchronous — assumes a synchronous store (e.g. better-sqlite3)
 export interface EventStore {
   insert(events: AgentWatchEvent[]): void;
-  getEvents(filters: EventFilters): AgentWatchEvent[];
-  getSessions(filters: SessionFilters): SessionSummary[];
-  getAgents(): AgentSummary[];
-  getRuns(filters: RunFilters): PipelineRunSummary[];
+  getEvents(filter: EventFilter): AgentWatchEvent[];
+  getSessions(filter: SessionFilter): SessionSummary[];
+  getRuns(filter: RunFilter): PipelineRunSummary[];
+  getRunDetail(pipelineId: string): RunDetail | null;
+  compareRuns(a: string, b: string): RunComparison | null;
+  getProjectSummaries(): ProjectSummary[];
+  getSessionTags(sessionId: string): string[];
+  setSessionTags(sessionId: string, tags: string[]): void;
+  getPanelData(query: PanelQuery): PanelResult;
 }
