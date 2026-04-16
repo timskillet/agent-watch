@@ -88,15 +88,15 @@ jobs:
                Prefix each comment with `[blocking]` or `[nit]`.
 
             2. After posting all inline comments, submit a formal PR review using `gh api`.
-               Determine the review event based on your findings:
-               - If ANY blocking findings exist → `REQUEST_CHANGES`
-               - If only nits or no findings → `COMMENT`
+               Always use `COMMENT` as the event — never `REQUEST_CHANGES`, because the bot
+               cannot re-review and approve after fixes are pushed, which blocks merging.
+               Blocking findings are communicated via `[blocking]` prefixes on inline comments.
 
                Use this command (substitute the actual values):
                ```
                gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
                  -f body="<1-2 sentence summary of overall assessment>" \
-                 -f event="<REQUEST_CHANGES or COMMENT>"
+                 -f event="COMMENT"
                ```
 
                The PR number is available from the pull request context. Use `gh pr view --json number -q .number`
