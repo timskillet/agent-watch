@@ -166,4 +166,53 @@ describe("POST /v1/traces", () => {
     const allOtlp = store.getEvents({ ingestionSource: "otlp" });
     expect(allOtlp.length).toBeGreaterThan(0);
   });
+
+  it("evicts sequence counters after each request", async () => {
+    const makePayload = (traceId: string) =>
+      makeOtlpTracePayload([
+        {
+          traceId,
+          spanId: "s1",
+          name: "gen_ai.create_agent",
+          startTimeUnixNano: "1700000000000000000",
+          endTimeUnixNano: "1700000001000000000",
+          attributes: [
+            {
+              key: "gen_ai.operation.name",
+              value: { stringValue: "create_agent" },
+            },
+            {
+              key: "gen_ai.agent.name",
+              value: { stringValue: "A" },
+            },
+            { key: "gen_ai.agent.id", value: { stringValue: "a1" } },
+            {
+              key: "gen_ai.conversation.id",
+              value: { stringValue: "evict-session" },
+            },
+          ],
+        },
+      ]);
+
+    // First request — sequence starts at 1
+    await app.inject({
+      method: "POST",
+      url: "/v1/traces",
+      payload: makePayload("trace-1"),
+    });
+
+    // Second request same session — sequence should restart at 1
+    // because the counter was evicted after the first request
+    await app.inject({
+      method: "POST",
+      url: "/v1/traces",
+      payload: makePayload("trace-2"),
+    });
+
+    const events = store.getEvents({ sessionId: "evict-session" });
+    expect(events).toHaveLength(2);
+    // Both requests should have sequence 1 (counter evicted between them)
+    expect(events[0].sequence).toBe(1);
+    expect(events[1].sequence).toBe(1);
+  });
 });

@@ -6,7 +6,7 @@ import type {
   EventLevel,
 } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
-import { nextSequence } from "./sequence.js";
+import { nextSequence, evictSession } from "./sequence.js";
 
 // ---------------------------------------------------------------------------
 // OTLP JSON wire-format types (stable spec, defined locally)
@@ -323,6 +323,14 @@ export function registerOtlpRoute(
 
       if (events.length > 0) {
         store.insert(events);
+
+        // Evict sequence counters for sessions in this batch.
+        // OTLP traces arrive as complete batches so counters aren't
+        // needed beyond this request — prevents unbounded Map growth.
+        const sessionIds = new Set(events.map((e) => e.sessionId));
+        for (const sid of sessionIds) {
+          evictSession(sid);
+        }
       }
 
       return reply.send({ partialSuccess: {} });
