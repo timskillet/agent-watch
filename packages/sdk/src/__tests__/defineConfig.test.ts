@@ -3,7 +3,6 @@ import { defineConfig } from "../index";
 import type {
   AgentWatchConfig,
   AlertRule,
-  AnnotationRule,
   PanelDefinition,
   PanelQuery,
 } from "../config";
@@ -20,7 +19,11 @@ describe("config types", () => {
   });
 
   it("PanelDefinition accepts all valid panel types", () => {
-    const baseQuery: PanelQuery = { metric: "session.cost", groupBy: "day", range: "30d" };
+    const baseQuery: PanelQuery = {
+      metric: "session.cost",
+      groupBy: "day",
+      range: "30d",
+    };
     const panels: PanelDefinition[] = [
       { id: "a", title: "A", type: "timeseries", query: baseQuery },
       { id: "b", title: "B", type: "bar", query: baseQuery },
