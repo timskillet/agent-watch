@@ -195,6 +195,7 @@ export interface SessionFilter {
   pipelineId?: string;
   pipelineDefinitionId?: string;
   projectId?: string;
+  ingestionSource?: IngestionSource;
   since?: number;
   until?: number;
   limit?: number;
@@ -204,6 +205,7 @@ export interface SessionFilter {
 export interface RunFilter {
   pipelineDefinitionId?: string;
   projectId?: string;
+  ingestionSource?: IngestionSource;
   status?: "running" | "completed" | "failed";
   since?: number;
   until?: number;
@@ -267,6 +269,7 @@ export interface RunDetail {
   endTime?: number;
   durationMs?: number;
   agents: string[];
+  /** Eagerly loaded — suitable for short-lived runs. Use EventStore.getEvents() with a filter for large pipelines. */
   events: AgentWatchEvent[];
 }
 
@@ -301,8 +304,8 @@ export interface EventStore {
   getEvents(filter: EventFilter): AgentWatchEvent[];
   getSessions(filter: SessionFilter): SessionSummary[];
   getRuns(filter: RunFilter): PipelineRunSummary[];
-  getRunDetail(pipelineId: string): RunDetail;
-  compareRuns(a: string, b: string): RunComparison;
+  getRunDetail(pipelineId: string): RunDetail | null;
+  compareRuns(a: string, b: string): RunComparison | null;
   getProjectSummaries(): ProjectSummary[];
   getSessionTags(sessionId: string): string[];
   setSessionTags(sessionId: string, tags: string[]): void;
