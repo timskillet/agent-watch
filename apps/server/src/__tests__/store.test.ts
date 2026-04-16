@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import Database from "better-sqlite3";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -49,23 +50,35 @@ describe("SQLiteEventStore", () => {
     });
 
     it("creates project_configs table", () => {
-      const db = (store as any).db;
-      const result = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='project_configs'",
-        )
-        .get();
-      expect(result).toBeTruthy();
+      // Verify by opening the same DB directly and checking sqlite_master
+      const dir = mkdtempSync(join(tmpdir(), "aw-test-"));
+      const dbPath = join(dir, "test.db");
+      const testStore = new SQLiteEventStore(dbPath);
+      try {
+        const db = new Database(dbPath);
+        const result = db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='project_configs'",
+          )
+          .get();
+        db.close();
+        expect(result).toBeTruthy();
+      } finally {
+        testStore.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it("enables WAL mode", () => {
       const dir = mkdtempSync(join(tmpdir(), "aw-test-"));
-      const fileStore = new SQLiteEventStore(join(dir, "test.db"));
+      const dbPath = join(dir, "test.db");
+      const fileStore = new SQLiteEventStore(dbPath);
       try {
-        const db = (fileStore as any).db;
+        const db = new Database(dbPath);
         const result = db.prepare("PRAGMA journal_mode").get() as {
           journal_mode: string;
         };
+        db.close();
         expect(result.journal_mode).toBe("wal");
       } finally {
         fileStore.close();

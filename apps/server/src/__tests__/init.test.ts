@@ -67,9 +67,7 @@ describe("mergeHookConfig", () => {
 
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
     expect(settings.hooks.PreToolUse).toHaveLength(2);
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe(
-      "echo pre-tool",
-    );
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe("echo pre-tool");
     expect(settings.hooks.PreToolUse[1].hooks[0].url).toBe(
       "http://localhost:4318/hooks",
     );

@@ -194,7 +194,11 @@ describe("normalizeHookPayload", () => {
       cwd: "/a/b/c",
     };
     const e1 = normalizeHookPayload(base);
-    const e2 = normalizeHookPayload({ ...base, type: "UserPromptSubmit", prompt: "hi" });
+    const e2 = normalizeHookPayload({
+      ...base,
+      type: "UserPromptSubmit",
+      prompt: "hi",
+    });
     const e3 = normalizeHookPayload({ ...base, type: "Stop" });
     expect(e1!.sequence).toBe(1);
     expect(e2!.sequence).toBe(2);
@@ -252,14 +256,21 @@ describe("normalizeHookPayload", () => {
     const types: ClaudeCodeHookPayload[] = [
       { session_id: "s", type: "SessionStart", cwd: "/foo/bar" },
       { session_id: "s", type: "SessionEnd" },
-      { session_id: "s", type: "PreToolUse", tool_name: "Bash", tool_use_id: "t1" },
+      {
+        session_id: "s",
+        type: "PreToolUse",
+        tool_name: "Bash",
+        tool_use_id: "t1",
+      },
       { session_id: "s", type: "UserPromptSubmit", prompt: "hi" },
       { session_id: "s", type: "Stop" },
     ];
     for (const hook of types) {
       const event = normalizeHookPayload(hook);
       if (event !== null) {
-        expect(event.meta).toMatchObject({ ingestion_source: "claude_code_hook" });
+        expect(event.meta).toMatchObject({
+          ingestion_source: "claude_code_hook",
+        });
       }
     }
   });
