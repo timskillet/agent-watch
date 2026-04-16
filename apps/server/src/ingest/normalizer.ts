@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { basename } from "path";
 import type { AgentWatchEvent } from "@agentwatch/types";
-import { nextSequence } from "./sequence.js";
+import { nextSequence, evictSession } from "./sequence.js";
 
 export interface ClaudeCodeHookPayload {
   session_id: string;
@@ -24,7 +24,20 @@ export interface ClaudeCodeHookPayload {
   [key: string]: unknown;
 }
 
+// tool_use_id → event id (for Pre/Post correlation)
 const preToolEventIds = new Map<string, string>();
+// session_id → set of tool_use_ids (for eviction on session end)
+const sessionToolUseIds = new Map<string, Set<string>>();
+
+function evictPreToolEntries(sessionId: string): void {
+  const toolUseIds = sessionToolUseIds.get(sessionId);
+  if (toolUseIds) {
+    for (const id of toolUseIds) {
+      preToolEventIds.delete(id);
+    }
+    sessionToolUseIds.delete(sessionId);
+  }
+}
 
 function base(
   hook: ClaudeCodeHookPayload,
@@ -57,7 +70,7 @@ export function normalizeHookPayload(
 
     case "SessionEnd":
     case "Stop": {
-      return {
+      const event = {
         ...base(hook),
         type: "session_end",
         payload: {
@@ -67,12 +80,22 @@ export function normalizeHookPayload(
             (hook.total_input_tokens ?? 0) + (hook.total_output_tokens ?? 0),
         },
       } as AgentWatchEvent;
+      // Evict session state to prevent memory leaks on long-running server
+      evictSession(hook.session_id);
+      evictPreToolEntries(hook.session_id);
+      return event;
     }
 
     case "PreToolUse": {
       const id = randomUUID();
       if (hook.tool_use_id) {
         preToolEventIds.set(hook.tool_use_id, id);
+        let ids = sessionToolUseIds.get(hook.session_id);
+        if (!ids) {
+          ids = new Set();
+          sessionToolUseIds.set(hook.session_id, ids);
+        }
+        ids.add(hook.tool_use_id);
       }
       return {
         ...base(hook),
@@ -169,4 +192,5 @@ export function normalizeHookPayload(
 
 export function resetNormalizerState(): void {
   preToolEventIds.clear();
+  sessionToolUseIds.clear();
 }

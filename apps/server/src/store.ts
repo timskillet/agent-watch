@@ -115,8 +115,7 @@ export class SQLiteEventStore implements EventStore {
     const run = this.db.transaction((evts: AgentWatchEvent[]) => {
       for (const evt of evts) {
         const meta = evt.meta ? JSON.stringify(evt.meta) : null;
-        const ingestionSource =
-          (evt.meta?.ingestion_source as string) ?? "unknown";
+        const ingestionSource = String(evt.meta?.ingestion_source ?? "unknown");
 
         this.insertStmt.run({
           id: evt.id,

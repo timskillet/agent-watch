@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 const HOOK_URL = "http://localhost:4318/hooks";
 
@@ -75,19 +75,17 @@ export function mergeHookConfig(settingsPath: string): void {
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
 
-const SYNC_EVENTS = new Set(["SessionStart", "SessionEnd"]);
-
 export function runInit(): void {
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "~";
-  const settingsPath = `${home}/.claude/settings.json`;
+  const settingsPath = join(home, ".claude", "settings.json");
 
   mergeHookConfig(settingsPath);
 
   console.log("AgentWatch hooks written to ~/.claude/settings.json");
   console.log("");
   console.log("Registered hooks:");
-  for (const event of Object.keys(AGENTWATCH_HOOKS)) {
-    const isAsync = !SYNC_EVENTS.has(event);
+  for (const [event, group] of Object.entries(AGENTWATCH_HOOKS)) {
+    const isAsync = group.hooks.some((h) => h.async === true);
     console.log(`  ${event}${isAsync ? " (async)" : ""}`);
   }
   console.log("");

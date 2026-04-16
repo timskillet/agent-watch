@@ -7,6 +7,10 @@ export function nextSequence(sessionId: string): number {
   return next;
 }
 
+export function evictSession(sessionId: string): void {
+  counters.delete(sessionId);
+}
+
 export function resetSequences(): void {
   counters.clear();
 }
