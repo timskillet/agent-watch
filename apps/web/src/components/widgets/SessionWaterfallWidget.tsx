@@ -20,7 +20,10 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
         }
       })
       .catch(() => {
-        if (!ignore) setLoadedSessionId(selectedSessionId);
+        if (!ignore) {
+          setDetail(null);
+          setLoadedSessionId(selectedSessionId);
+        }
       });
     return () => {
       ignore = true;
