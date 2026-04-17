@@ -10,7 +10,15 @@ export function CostTrendWidget({
   if (isConfigOpen) {
     return (
       <div style={{ padding: 4 }}>
-        <label style={{ color: "#aaa", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <label
+          style={{
+            color: "#aaa",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           Range:
           <select
             value={range}

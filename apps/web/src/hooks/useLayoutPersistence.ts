@@ -9,10 +9,7 @@ function loadFromStorage(): DashboardState | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (
-      Array.isArray(parsed?.widgets) &&
-      Array.isArray(parsed?.gridLayout)
-    ) {
+    if (Array.isArray(parsed?.widgets) && Array.isArray(parsed?.gridLayout)) {
       return parsed as DashboardState;
     }
     return null;
@@ -69,9 +66,7 @@ export function useLayoutPersistence(defaultState: DashboardState) {
     (id: string, config: Record<string, unknown>) => {
       setState((prev) => ({
         ...prev,
-        widgets: prev.widgets.map((w) =>
-          w.id === id ? { ...w, config } : w,
-        ),
+        widgets: prev.widgets.map((w) => (w.id === id ? { ...w, config } : w)),
       }));
     },
     [],

@@ -10,8 +10,18 @@ export function ToolBreakdownWidget({
 
   if (isConfigOpen) {
     return (
-      <div style={{ padding: 4, display: "flex", flexDirection: "column", gap: 8 }}>
-        <label style={{ color: "#aaa", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        style={{ padding: 4, display: "flex", flexDirection: "column", gap: 8 }}
+      >
+        <label
+          style={{
+            color: "#aaa",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           Range:
           <select
             value={range}
@@ -25,7 +35,15 @@ export function ToolBreakdownWidget({
             <option value="90d">90 days</option>
           </select>
         </label>
-        <label style={{ color: "#aaa", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <label
+          style={{
+            color: "#aaa",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           Metric:
           <select
             value={metric}

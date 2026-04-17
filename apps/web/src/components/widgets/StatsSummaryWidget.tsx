@@ -43,10 +43,15 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
       label: "Success Rate",
       value: total > 0 ? `${Math.round((completed / total) * 100)}%` : "\u2014",
     },
-    { label: "Failed", value: String(failed), color: failed > 0 ? "#f87171" : undefined },
+    {
+      label: "Failed",
+      value: String(failed),
+      color: failed > 0 ? "#f87171" : undefined,
+    },
     {
       label: "Avg Duration",
-      value: avgDuration != null ? `${(avgDuration / 1000).toFixed(1)}s` : "\u2014",
+      value:
+        avgDuration != null ? `${(avgDuration / 1000).toFixed(1)}s` : "\u2014",
     },
     { label: "Total Events", value: String(totalEvents) },
   ];
@@ -63,10 +68,23 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
     >
       {stats.map((s) => (
         <div key={s.label} style={{ minWidth: 100 }}>
-          <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <div
+            style={{
+              color: "#888",
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
             {s.label}
           </div>
-          <div style={{ color: s.color ?? "#e0e0e0", fontSize: 20, fontWeight: 700 }}>
+          <div
+            style={{
+              color: s.color ?? "#e0e0e0",
+              fontSize: 20,
+              fontWeight: 700,
+            }}
+          >
             {s.value}
           </div>
         </div>

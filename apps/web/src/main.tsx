@@ -1,5 +1,4 @@
 import "react-grid-layout/css/styles.css";
-import "react-resizable/css/styles.css";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";

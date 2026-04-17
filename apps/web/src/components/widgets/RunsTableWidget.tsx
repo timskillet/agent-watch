@@ -16,17 +16,30 @@ export function RunsTableWidget({
   const limit = (config.limit as number) ?? 50;
 
   useEffect(() => {
-    setLoading(true);
+    let ignore = false;
     getRuns({ limit }).then((data) => {
-      setRuns(data);
-      setLoading(false);
+      if (!ignore) {
+        setRuns(data);
+        setLoading(false);
+      }
     });
+    return () => {
+      ignore = true;
+    };
   }, [limit]);
 
   if (isConfigOpen) {
     return (
       <div style={{ padding: 4 }}>
-        <label style={{ color: "#aaa", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <label
+          style={{
+            color: "#aaa",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           Max rows:
           <select
             value={String(limit)}
@@ -87,9 +100,7 @@ export function RunsTableWidget({
                 ? `${(run.durationMs / 1000).toFixed(1)}s`
                 : "\u2014"}
             </td>
-            <td style={td}>
-              {new Date(run.startTime).toLocaleTimeString()}
-            </td>
+            <td style={td}>{new Date(run.startTime).toLocaleTimeString()}</td>
           </tr>
         ))}
       </tbody>

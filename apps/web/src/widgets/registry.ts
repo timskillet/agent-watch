@@ -76,9 +76,10 @@ export function getDefaultConfig(type: WidgetType): Record<string, unknown> {
   return { ...defaultConfigs[type] };
 }
 
-export function getDefaultSize(
-  type: WidgetType,
-): { defaultW: number; defaultH: number } {
+export function getDefaultSize(type: WidgetType): {
+  defaultW: number;
+  defaultH: number;
+} {
   const def = getWidgetDefinition(type);
   return { defaultW: def?.defaultW ?? 6, defaultH: def?.defaultH ?? 4 };
 }

@@ -7,19 +7,24 @@ import type { WidgetProps } from "../../widgets/types";
 export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
   const { selectedSessionId } = useSelection();
   const [detail, setDetail] = useState<RunDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedSessionId) {
-      setDetail(null);
-      return;
-    }
-    setLoading(true);
+    if (!selectedSessionId) return;
+    let ignore = false;
     getRunDetail(selectedSessionId).then((data) => {
-      setDetail(data);
-      setLoading(false);
+      if (!ignore) {
+        setDetail(data);
+        setLoadedSessionId(selectedSessionId);
+      }
     });
+    return () => {
+      ignore = true;
+    };
   }, [selectedSessionId]);
+
+  const loading =
+    selectedSessionId != null && loadedSessionId !== selectedSessionId;
 
   if (isConfigOpen) {
     return (
@@ -126,13 +131,24 @@ function getEventName(e: AgentWatchEvent): string {
     e.type === "tool_result" ||
     e.type === "tool_error"
   ) {
-    return (e.payload as Record<string, unknown>)["gen_ai.tool.name"] as string ?? e.type;
+    return (
+      ((e.payload as Record<string, unknown>)["gen_ai.tool.name"] as string) ??
+      e.type
+    );
   }
   if (e.type === "llm_call") {
-    return (e.payload as Record<string, unknown>)["gen_ai.request.model"] as string ?? "LLM";
+    return (
+      ((e.payload as Record<string, unknown>)[
+        "gen_ai.request.model"
+      ] as string) ?? "LLM"
+    );
   }
   if (e.type === "llm_response") {
-    return (e.payload as Record<string, unknown>)["gen_ai.response.model"] as string ?? "LLM";
+    return (
+      ((e.payload as Record<string, unknown>)[
+        "gen_ai.response.model"
+      ] as string) ?? "LLM"
+    );
   }
   return e.type;
 }
