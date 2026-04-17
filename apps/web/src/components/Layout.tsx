@@ -1,9 +1,10 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
+import { SelectionProvider } from "../context/SelectionContext";
 
 const SIDEBAR_WIDTH = 200;
 
 const NAV_LINKS = [
-  { to: "/", label: "Runs" },
+  { to: "/", label: "Dashboard" },
   { to: "/compare", label: "Compare" },
 ];
 
@@ -124,7 +125,9 @@ export function Layout() {
       </aside>
 
       <main style={{ flex: 1, padding: 16 }}>
-        <Outlet />
+        <SelectionProvider>
+          <Outlet />
+        </SelectionProvider>
       </main>
     </div>
   );
