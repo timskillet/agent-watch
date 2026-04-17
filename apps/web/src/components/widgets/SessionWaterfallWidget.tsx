@@ -12,12 +12,16 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
   useEffect(() => {
     if (!selectedSessionId) return;
     let ignore = false;
-    getRunDetail(selectedSessionId).then((data) => {
-      if (!ignore) {
-        setDetail(data);
-        setLoadedSessionId(selectedSessionId);
-      }
-    });
+    getRunDetail(selectedSessionId)
+      .then((data) => {
+        if (!ignore) {
+          setDetail(data);
+          setLoadedSessionId(selectedSessionId);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setLoadedSessionId(selectedSessionId);
+      });
     return () => {
       ignore = true;
     };
@@ -58,7 +62,10 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
   const minTime = detail.startTime;
   const maxTime =
     detail.endTime ??
-    Math.max(...detail.events.map((e) => e.timestamp + (e.durationMs ?? 0)));
+    detail.events.reduce(
+      (max, e) => Math.max(max, e.timestamp + (e.durationMs ?? 0)),
+      0,
+    );
   const span = maxTime - minTime || 1;
 
   return (

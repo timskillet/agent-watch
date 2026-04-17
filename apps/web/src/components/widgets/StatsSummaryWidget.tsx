@@ -8,10 +8,20 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getRuns({ limit: 500 }).then((data) => {
-      setRuns(data);
-      setLoading(false);
-    });
+    let ignore = false;
+    getRuns({ limit: 500 })
+      .then((data) => {
+        if (!ignore) {
+          setRuns(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   if (isConfigOpen) {

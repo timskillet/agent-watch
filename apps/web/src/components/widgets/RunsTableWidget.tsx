@@ -17,12 +17,16 @@ export function RunsTableWidget({
 
   useEffect(() => {
     let ignore = false;
-    getRuns({ limit }).then((data) => {
-      if (!ignore) {
-        setRuns(data);
-        setLoading(false);
-      }
-    });
+    getRuns({ limit })
+      .then((data) => {
+        if (!ignore) {
+          setRuns(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setLoading(false);
+      });
     return () => {
       ignore = true;
     };
