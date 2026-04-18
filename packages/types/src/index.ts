@@ -283,6 +283,8 @@ export interface PanelQuery {
   metric?:
     | "session.cost"
     | "session.duration"
+    | "tool.count"
+    | "tool.duration"
     | "tool.failure_rate"
     | "token.usage";
   groupBy?: "day" | "tool_name" | "command_prefix" | "session_tag";
