@@ -5,7 +5,8 @@
     "rootDir": "src",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["vitest/globals"]
   },
   "include": ["src"]
 }
