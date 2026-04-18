@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   normalizeHookPayload,
   resetNormalizerState,
@@ -273,5 +273,134 @@ describe("normalizeHookPayload", () => {
         });
       }
     }
+  });
+
+  it("17. dispatches on hook_event_name (Claude Code HTTP hook payload shape)", () => {
+    const event = normalizeHookPayload({
+      session_id: "sess-hen",
+      hook_event_name: "SessionStart",
+      cwd: "/home/user/my-project",
+    });
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe("session_start");
+    expect(event!.pipelineId).toBe("sess-hen");
+    expect(event!.pipelineDefinitionId).toBe("my-project");
+  });
+
+  it("18. hook_event_name takes precedence over type when both are present", () => {
+    const event = normalizeHookPayload({
+      session_id: "sess-both",
+      hook_event_name: "SessionStart",
+      type: "UserPromptSubmit",
+      cwd: "/x",
+    });
+    expect(event!.type).toBe("session_start");
+  });
+
+  it("19. pipelineId equals session_id on every normalized event", () => {
+    const hooks: ClaudeCodeHookPayload[] = [
+      { session_id: "sid", hook_event_name: "SessionStart", cwd: "/a/b" },
+      {
+        session_id: "sid",
+        hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        tool_use_id: "t",
+      },
+      { session_id: "sid", hook_event_name: "UserPromptSubmit", prompt: "hi" },
+    ];
+    for (const hook of hooks) {
+      const event = normalizeHookPayload(hook);
+      expect(event!.pipelineId).toBe("sid");
+    }
+  });
+
+  it("20. PostToolUse computes durationMs from Pre/Post timestamps when absent", () => {
+    normalizeHookPayload({
+      session_id: "sess-dur",
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-1",
+      timestamp: 1_000_000,
+    });
+    const post = normalizeHookPayload({
+      session_id: "sess-dur",
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-1",
+      tool_response: {},
+      timestamp: 1_000_250,
+    });
+    expect(post!.durationMs).toBe(250);
+  });
+
+  it("21. PostToolUse prefers Claude-provided duration_ms over computed delta", () => {
+    normalizeHookPayload({
+      session_id: "sess-dur2",
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-2",
+      timestamp: 1_000_000,
+    });
+    const post = normalizeHookPayload({
+      session_id: "sess-dur2",
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-2",
+      tool_response: {},
+      timestamp: 1_000_999,
+      duration_ms: 42,
+    });
+    expect(post!.durationMs).toBe(42);
+  });
+
+  it("22. implausible computed durations (negative / > 1h) are dropped", () => {
+    normalizeHookPayload({
+      session_id: "sess-neg",
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-neg",
+      timestamp: 2_000_000,
+    });
+    const post = normalizeHookPayload({
+      session_id: "sess-neg",
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_use_id: "tu-neg",
+      tool_response: {},
+      timestamp: 1_999_000, // Post before Pre -> negative
+    });
+    expect(post!.durationMs).toBeUndefined();
+  });
+
+  it("23. tool_response field (Claude Code HTTP hook shape) populates output", () => {
+    normalizeHookPayload({
+      session_id: "sess-tr",
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_use_id: "tu-tr",
+    });
+    const post = normalizeHookPayload({
+      session_id: "sess-tr",
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "tu-tr",
+      tool_response: { stdout: "hello" },
+    });
+    expect(post!.payload).toMatchObject({
+      output: { stdout: "hello" },
+    });
+  });
+
+  it("24. unknown event name is dropped and logged", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const event = normalizeHookPayload({
+      session_id: "sess-unk",
+      hook_event_name: "TotallyMadeUpEvent",
+    });
+    expect(event).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("TotallyMadeUpEvent"),
+    );
+    warnSpy.mockRestore();
   });
 });
