@@ -52,13 +52,13 @@ export function ToolBreakdownWidget({
 }: WidgetProps) {
   const range: Range = isRange(config.range) ? config.range : "7d";
   const metric: Metric = normalizeMetric(config.metric);
-  const queryKey = `${metric}|${range}`;
   const [loaded, setLoaded] = useState<{ key: string; rows: Row[] } | null>(
     null,
   );
 
   useEffect(() => {
     let ignore = false;
+    const key = `${metric}|${range}`;
     const query: PanelQuery = {
       metric,
       groupBy: "tool_name",
@@ -71,14 +71,14 @@ export function ToolBreakdownWidget({
         tool: String(r.tool ?? ""),
         value: Number(r.value) || 0,
       }));
-      setLoaded({ key: queryKey, rows: mapped });
+      setLoaded({ key, rows: mapped });
     });
     return () => {
       ignore = true;
     };
   }, [metric, range]);
 
-  const isLoading = loaded == null || loaded.key !== queryKey;
+  const isLoading = loaded == null || loaded.key !== `${metric}|${range}`;
   const rows = loaded?.rows ?? null;
 
   if (isConfigOpen) {

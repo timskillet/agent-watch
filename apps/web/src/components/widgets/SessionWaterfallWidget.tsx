@@ -69,6 +69,27 @@ function getEventName(e: AgentWatchEvent): string {
   return e.type;
 }
 
+// Over-estimates of the rendered tooltip box so we can flip before it clips.
+// The CSS sets min-width: 180px; actual content (tool name + rows + optional
+// error message) rarely exceeds these bounds.
+const TOOLTIP_W = 260;
+const TOOLTIP_H = 140;
+const CURSOR_OFFSET = 12;
+const VIEWPORT_PAD = 8;
+
+function positionTooltip(x: number, y: number): { left: number; top: number } {
+  const flipX = x + CURSOR_OFFSET + TOOLTIP_W > window.innerWidth;
+  const flipY = y + CURSOR_OFFSET + TOOLTIP_H > window.innerHeight;
+  return {
+    left: flipX
+      ? Math.max(VIEWPORT_PAD, x - CURSOR_OFFSET - TOOLTIP_W)
+      : x + CURSOR_OFFSET,
+    top: flipY
+      ? Math.max(VIEWPORT_PAD, y - CURSOR_OFFSET - TOOLTIP_H)
+      : y + CURSOR_OFFSET,
+  };
+}
+
 function formatRelativeTime(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
@@ -204,8 +225,7 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
           className={styles.tooltip}
           style={{
             ...tooltipContentStyle,
-            left: hover.x + 12,
-            top: hover.y + 12,
+            ...positionTooltip(hover.x, hover.y),
           }}
         >
           <div className={styles.tooltipTitle}>{hover.bar.name}</div>
