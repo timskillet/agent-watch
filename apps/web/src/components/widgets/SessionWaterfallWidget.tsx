@@ -3,6 +3,9 @@ import type { AgentWatchEvent, RunDetail } from "@agentwatch/types";
 import { getRunDetail } from "../../api/client";
 import { useSelection } from "../../context/SelectionContext";
 import type { WidgetProps } from "../../widgets/types";
+import { Skeleton } from "../ui/Skeleton";
+import { EmptyState } from "../ui/EmptyState";
+import styles from "./SessionWaterfallWidget.module.css";
 
 export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
   const { selectedSessionId } = useSelection();
@@ -35,7 +38,7 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
 
   if (isConfigOpen) {
     return (
-      <div style={{ color: "#aaa", fontSize: 12, padding: 4 }}>
+      <div className={styles.configPanel}>
         Session: {selectedSessionId ?? "none selected"}
       </div>
     );
@@ -43,23 +46,15 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
 
   if (!selectedSessionId) {
     return (
-      <div style={{ color: "#666", fontSize: 12 }}>
-        Select a session from the Runs Table
-      </div>
+      <EmptyState icon="↔" message="Select a session from the Runs Table" />
     );
   }
-  if (loading)
-    return <div style={{ color: "#666", fontSize: 12 }}>Loading...</div>;
-  if (!detail)
-    return <div style={{ color: "#666", fontSize: 12 }}>Session not found</div>;
+  if (loading) return <Skeleton variant="block" height={120} />;
+  if (!detail) return <EmptyState message="Session not found" />;
 
   const bars = buildBars(detail);
   if (bars.length === 0) {
-    return (
-      <div style={{ color: "#666", fontSize: 12 }}>
-        No timed tool events in this session
-      </div>
-    );
+    return <EmptyState message="No timed tool events in this session" />;
   }
 
   const minTime = detail.startTime;
@@ -72,34 +67,20 @@ export function SessionWaterfallWidget({ isConfigOpen }: WidgetProps) {
   const span = maxTime - minTime || 1;
 
   return (
-    <div style={{ fontSize: 12 }}>
+    <div className={styles.waterfall}>
       {bars.map((bar) => {
         const leftPct = ((bar.start - minTime) / span) * 100;
         const widthPct = Math.max((bar.duration / span) * 100, 1);
         return (
-          <div
-            key={bar.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: 3,
-            }}
-          >
-            <span style={nameCol}>{bar.name}</span>
-            <div style={trackStyle}>
+          <div key={bar.id} className={styles.bar}>
+            <span className={styles.nameCol}>{bar.name}</span>
+            <div className={styles.track}>
               <div
-                style={{
-                  position: "absolute",
-                  left: `${leftPct}%`,
-                  width: `${widthPct}%`,
-                  height: "100%",
-                  background: bar.isError ? "#f87171" : "#8b9cf7",
-                  borderRadius: 2,
-                  minWidth: 2,
-                }}
+                className={`${styles.fill} ${bar.isError ? styles.fillError : ""}`}
+                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
               />
             </div>
-            <span style={durationCol}>{bar.duration}ms</span>
+            <span className={styles.durationCol}>{bar.duration}ms</span>
           </div>
         );
       })}
@@ -162,27 +143,3 @@ function getEventName(e: AgentWatchEvent): string {
   }
   return e.type;
 }
-
-const nameCol: React.CSSProperties = {
-  width: 100,
-  flexShrink: 0,
-  color: "#aaa",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  paddingRight: 8,
-};
-const trackStyle: React.CSSProperties = {
-  flex: 1,
-  position: "relative",
-  height: 16,
-  background: "#1a1a2e",
-  borderRadius: 2,
-};
-const durationCol: React.CSSProperties = {
-  width: 56,
-  flexShrink: 0,
-  textAlign: "right",
-  color: "#666",
-  paddingLeft: 8,
-};

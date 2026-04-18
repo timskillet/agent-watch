@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { PipelineRunSummary } from "@agentwatch/types";
 import { getRuns } from "../../api/client";
 import type { WidgetProps } from "../../widgets/types";
+import { Skeleton } from "../ui/Skeleton";
+import styles from "./StatsSummaryWidget.module.css";
 
 export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
   const [runs, setRuns] = useState<PipelineRunSummary[]>([]);
@@ -26,14 +28,24 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
 
   if (isConfigOpen) {
     return (
-      <div style={{ color: "#aaa", fontSize: 12, padding: 4 }}>
+      <div className={styles.configPanel}>
         Displays aggregate stats from recent runs. No configuration options.
       </div>
     );
   }
 
-  if (loading)
-    return <div style={{ color: "#666", fontSize: 12 }}>Loading...</div>;
+  if (loading) {
+    return (
+      <div className={styles.skeletonGrid}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className={styles.skeletonCard}>
+            <Skeleton width={60} height={10} />
+            <Skeleton width={48} height={20} />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const total = runs.length;
   const completed = runs.filter((r) => r.status === "completed").length;
@@ -56,7 +68,7 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
     {
       label: "Failed",
       value: String(failed),
-      color: failed > 0 ? "#f87171" : undefined,
+      danger: failed > 0,
     },
     {
       label: "Avg Duration",
@@ -67,33 +79,12 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
   ];
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 16,
-        flexWrap: "wrap",
-        alignItems: "center",
-        height: "100%",
-      }}
-    >
+    <div className={styles.grid}>
       {stats.map((s) => (
-        <div key={s.label} style={{ minWidth: 100 }}>
+        <div key={s.label} className={styles.card}>
+          <div className={styles.label}>{s.label}</div>
           <div
-            style={{
-              color: "#888",
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-            }}
-          >
-            {s.label}
-          </div>
-          <div
-            style={{
-              color: s.color ?? "#e0e0e0",
-              fontSize: 20,
-              fontWeight: 700,
-            }}
+            className={`${styles.value} ${s.danger ? styles.valueDanger : ""}`}
           >
             {s.value}
           </div>

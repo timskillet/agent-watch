@@ -6,6 +6,8 @@ import { getDefaultLayout } from "../../widgets/presets";
 import { WidgetFrame } from "./WidgetFrame";
 import { WidgetPicker } from "./WidgetPicker";
 import { LayoutSwitcher } from "./LayoutSwitcher";
+import { Button } from "../ui/Button";
+import styles from "./WidgetDashboard.module.css";
 
 export function WidgetDashboard() {
   const { width, containerRef, mounted } = useContainerWidth();
@@ -35,17 +37,10 @@ export function WidgetDashboard() {
 
   return (
     <div ref={containerRef}>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 12,
-          alignItems: "center",
-        }}
-      >
-        <button onClick={() => setPickerOpen(true)} style={addBtnStyle}>
+      <div className={styles.toolbar}>
+        <Button variant="primary" size="md" onClick={() => setPickerOpen(true)}>
           + Add Widget
-        </button>
+        </Button>
         <LayoutSwitcher onLoadPreset={loadPreset} />
       </div>
 
@@ -102,14 +97,3 @@ export function WidgetDashboard() {
     </div>
   );
 }
-
-const addBtnStyle: React.CSSProperties = {
-  background: "#8b9cf7",
-  color: "#1a1a2e",
-  border: "none",
-  borderRadius: 4,
-  padding: "6px 14px",
-  cursor: "pointer",
-  fontSize: 12,
-  fontWeight: 600,
-};
