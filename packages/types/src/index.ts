@@ -23,6 +23,19 @@ export type EventLevel = "debug" | "info" | "warn" | "error";
 
 export type IngestionSource = "claude_code_hook" | "otlp";
 
+export type TimeRangePreset =
+  | "15m"
+  | "1h"
+  | "4h"
+  | "24h"
+  | "7d"
+  | "30d"
+  | "all";
+
+export type TimeRange =
+  | { kind: "preset"; value: TimeRangePreset }
+  | { kind: "custom"; since: number; until: number };
+
 // ---------------------------------------------------------------------------
 // Payload interfaces — OTel GenAI Semantic Convention naming
 // ---------------------------------------------------------------------------
@@ -315,8 +328,17 @@ export interface PanelQuery {
     | "tool.duration"
     | "tool.failure_rate"
     | "token.usage";
-  groupBy?: "day" | "tool_name" | "command_prefix" | "session_tag";
+  groupBy?:
+    | "day"
+    | "tool_name"
+    | "command_prefix"
+    | "session_tag"
+    | "bash_command"
+    | "file_extension"
+    | "mcp_server";
   range?: "7d" | "30d" | "90d";
+  since?: number;
+  until?: number;
   limit?: number;
 }
 
