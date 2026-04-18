@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import styles from "./Drawer.module.css";
@@ -83,7 +89,8 @@ function DrawerInner({
   }, [onClose]);
 
   const resolvedWidth = typeof width === "number" ? `${width}px` : width;
-  const titleId = typeof title === "string" ? "drawer-title" : undefined;
+  const generatedId = useId();
+  const titleId = typeof title === "string" ? generatedId : undefined;
 
   return (
     <div className={styles.root}>
@@ -93,6 +100,7 @@ function DrawerInner({
         className={`${styles.panel} ${styles.panelClosed}`}
         style={{ width: resolvedWidth }}
         role="dialog"
+        aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
       >

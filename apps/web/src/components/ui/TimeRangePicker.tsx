@@ -131,8 +131,8 @@ export function TimeRangePicker({
 
           <div className={styles.custom}>
             <span className={styles.customLabel}>Custom range</span>
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>From</label>
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>From</span>
               <input
                 type="datetime-local"
                 className={styles.dateInput}
@@ -142,9 +142,9 @@ export function TimeRangePicker({
                   setError(null);
                 }}
               />
-            </div>
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>To</label>
+            </label>
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>To</span>
               <input
                 type="datetime-local"
                 className={styles.dateInput}
@@ -154,7 +154,7 @@ export function TimeRangePicker({
                   setError(null);
                 }}
               />
-            </div>
+            </label>
             {error != null && <span className={styles.errorText}>{error}</span>}
             <div className={styles.applyRow}>
               <Button
