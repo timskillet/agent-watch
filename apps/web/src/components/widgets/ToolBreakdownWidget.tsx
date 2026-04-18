@@ -76,7 +76,7 @@ export function ToolBreakdownWidget({
     return () => {
       ignore = true;
     };
-  }, [metric, range, queryKey]);
+  }, [metric, range]);
 
   const isLoading = loaded == null || loaded.key !== queryKey;
   const rows = loaded?.rows ?? null;
