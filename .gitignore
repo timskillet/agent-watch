@@ -2,5 +2,6 @@ node_modules/
 dist/
 .obsidian/
 .turbo/
+.superpowers/
 *.tsbuildinfo
 .env*
