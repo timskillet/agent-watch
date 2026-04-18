@@ -226,15 +226,25 @@ export function RunsTableWidget({
     cfg.sort.dir,
   ]);
 
-  // Lazily fetch RunDetail when a row expands.
+  // Lazily fetch RunDetail when a row expands. On failure, drop the id from
+  // detailFetched so a subsequent collapse + re-expand can retry instead of
+  // showing the loading skeleton forever.
   const detailFetched = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const id of expandedIds) {
       if (detailFetched.current.has(id)) continue;
       detailFetched.current.add(id);
-      getRunDetail(id).then((d) => {
-        if (d) setDetails((prev) => new Map(prev).set(id, d));
-      });
+      getRunDetail(id)
+        .then((d) => {
+          if (d) {
+            setDetails((prev) => new Map(prev).set(id, d));
+          } else {
+            detailFetched.current.delete(id);
+          }
+        })
+        .catch(() => {
+          detailFetched.current.delete(id);
+        });
     }
   }, [expandedIds]);
 
@@ -613,12 +623,7 @@ function renderCell(key: ColumnKey, run: PipelineRunSummary, ctx: CellContext) {
       if (data.length < 2) return <span className={styles.muted}>—</span>;
       return (
         <div className={styles.trendCell}>
-          <Sparkline
-            data={data as unknown as Record<string, unknown>[]}
-            yKey="durationMs"
-            width={80}
-            height={20}
-          />
+          <Sparkline data={data} yKey="durationMs" width={80} height={20} />
         </div>
       );
     }
