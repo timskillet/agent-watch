@@ -81,9 +81,9 @@ export function StatsSummaryWidget({ isConfigOpen }: WidgetProps) {
   useEffect(() => {
     let ignore = false;
     getRuns({ limit: 500 })
-      .then((data) => {
+      .then((res) => {
         if (!ignore) {
-          setRuns(data);
+          setRuns(res.rows);
           setLoading(false);
         }
       })
