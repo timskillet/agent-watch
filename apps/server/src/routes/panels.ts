@@ -52,7 +52,6 @@ export function registerPanelsRoute(
       if (range === false) return;
 
       const query: PanelQuery = {
-        tool: q.tool,
         metric: metric as PanelQuery["metric"],
         groupBy: groupBy as PanelQuery["groupBy"],
         range: range as PanelQuery["range"],

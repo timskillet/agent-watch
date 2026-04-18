@@ -522,7 +522,7 @@ export class SQLiteEventStore implements EventStore {
     const range = query.range ?? "7d";
     const days = range === "30d" ? 30 : range === "90d" ? 90 : 7;
     const since = Date.now() - days * 86_400_000;
-    const limit = Math.min(query.limit ?? 50, 500);
+    const limit = Math.min(Math.max(1, query.limit ?? 50), 500);
     const metric = query.metric;
     const groupBy =
       query.groupBy ?? (metric?.startsWith("tool.") ? "tool_name" : "day");
@@ -575,8 +575,8 @@ export class SQLiteEventStore implements EventStore {
           FROM events
           WHERE type = 'tool_call'
             AND timestamp >= @since
+            AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
           GROUP BY tool
-          HAVING tool IS NOT NULL
           ORDER BY value DESC
           LIMIT @limit
         `;
@@ -596,8 +596,8 @@ export class SQLiteEventStore implements EventStore {
           WHERE type = 'tool_call'
             AND timestamp >= @since
             AND duration_ms IS NOT NULL
+            AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
           GROUP BY tool
-          HAVING tool IS NOT NULL
           ORDER BY value DESC
           LIMIT @limit
         `;
@@ -612,6 +612,10 @@ export class SQLiteEventStore implements EventStore {
       }
 
       if (metric === "tool.failure_rate") {
+        // value = errors / calls, where calls counts tool_call events and errors
+        // counts tool_error events. Assumes a failed invocation fires both events;
+        // if a data anomaly produces errors > calls we clamp to 1.0 instead of
+        // exposing a rate above 100%.
         const sql = `
           WITH calls AS (
             SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
@@ -619,8 +623,8 @@ export class SQLiteEventStore implements EventStore {
             FROM events
             WHERE type = 'tool_call'
               AND timestamp >= @since
+              AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
             GROUP BY tool
-            HAVING tool IS NOT NULL
           ),
           errs AS (
             SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
@@ -628,13 +632,13 @@ export class SQLiteEventStore implements EventStore {
             FROM events
             WHERE type = 'tool_error'
               AND timestamp >= @since
+              AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
             GROUP BY tool
-            HAVING tool IS NOT NULL
           )
           SELECT calls.tool AS tool,
                  COALESCE(errs.n, 0) AS errors,
                  calls.n AS calls,
-                 CAST(COALESCE(errs.n, 0) AS REAL) / calls.n AS value
+                 MIN(CAST(COALESCE(errs.n, 0) AS REAL) / calls.n, 1.0) AS value
           FROM calls
           LEFT JOIN errs ON errs.tool = calls.tool
           ORDER BY value DESC, calls.n DESC

@@ -262,6 +262,26 @@ describe("EventStore.getPanelData", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("negative limit is clamped to at least 1 (does not bypass the 500 cap)", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      range: "7d",
+      limit: -1,
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("zero limit is clamped up (returns at least 1 row)", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      range: "7d",
+      limit: 0,
+    });
+    expect(rows).toHaveLength(1);
+  });
+
   it("returns empty rows for unsupported metric/groupBy combo", () => {
     // session.cost with tool_name grouping doesn't make sense
     const { rows } = store.getPanelData({
