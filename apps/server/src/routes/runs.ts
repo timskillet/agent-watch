@@ -1,13 +1,19 @@
 import type { FastifyInstance } from "fastify";
-import type { RunFilter } from "@agentwatch/types";
+import type { RunFilter, RunListResult } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
-import { toNum, validateStatus, validateIngestionSource } from "./utils.js";
+import {
+  toNum,
+  validateStatusList,
+  validateIngestionSourceList,
+  validateSortBy,
+  validateSortDir,
+} from "./utils.js";
 
 export function registerRunsRoute(
   app: FastifyInstance,
   store: SQLiteEventStore,
 ): void {
-  // Static route must be registered before parametric
+  // Static routes must be registered before parametric ones
   app.get<{ Querystring: Record<string, string | undefined> }>(
     "/api/runs/compare",
     async (req, reply) => {
@@ -26,25 +32,59 @@ export function registerRunsRoute(
   );
 
   app.get<{ Querystring: Record<string, string | undefined> }>(
+    "/api/runs/trends",
+    async (req, reply) => {
+      const { pipelineDefinitionIds, limit } = req.query;
+      if (!pipelineDefinitionIds) {
+        return reply.send({ trends: {} });
+      }
+      const ids = pipelineDefinitionIds
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (ids.length === 0) {
+        return reply.send({ trends: {} });
+      }
+      const perPipelineLimit = toNum(limit) ?? 10;
+      const trends = store.getRunDurationTrends(ids, perPipelineLimit);
+      return reply.send({ trends });
+    },
+  );
+
+  app.get<{ Querystring: Record<string, string | undefined> }>(
     "/api/runs",
     async (req, reply) => {
       const q = req.query;
-      const status = validateStatus(q.status, reply);
+      // status / ingestionSource accept comma-separated lists for multi-select UI
+      const status = validateStatusList(q.status, reply);
       if (status === false) return;
-      const ingestionSource = validateIngestionSource(q.ingestionSource, reply);
+      const ingestionSource = validateIngestionSourceList(
+        q.ingestionSource,
+        reply,
+      );
       if (ingestionSource === false) return;
+      const sortBy = validateSortBy(q.sortBy, reply);
+      if (sortBy === false) return;
+      const sortDir = validateSortDir(q.sortDir, reply);
+      if (sortDir === false) return;
 
       const filter: RunFilter = {
         pipelineDefinitionId: q.pipelineDefinitionId,
         projectId: q.projectId,
         ingestionSource,
         status,
+        search: q.search,
+        sortBy,
+        sortDir,
         since: toNum(q.since),
         until: toNum(q.until),
         limit: toNum(q.limit),
         offset: toNum(q.offset),
       };
-      return reply.send(store.getRuns(filter));
+      const rows = store.getRuns(filter);
+      const total = store.getRunsCount(filter);
+      const body: RunListResult = { rows, total };
+      return reply.send(body);
     },
   );
 

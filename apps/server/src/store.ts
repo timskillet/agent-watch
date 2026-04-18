@@ -6,6 +6,8 @@ import type {
   SessionFilter,
   PipelineRunSummary,
   RunFilter,
+  RunSortKey,
+  RunDurationTrends,
   RunDetail,
   RunComparison,
   ProjectSummary,
@@ -331,77 +333,9 @@ export class SQLiteEventStore implements EventStore {
   }
 
   getRuns(filter: RunFilter): PipelineRunSummary[] {
-    const innerConditions: string[] = ["pipeline_id IS NOT NULL"];
-    const innerHaving: string[] = [];
-    const params: Record<string, unknown> = {};
-
-    if (filter.pipelineDefinitionId) {
-      innerConditions.push("pipeline_definition_id = @pipelineDefinitionId");
-      params.pipelineDefinitionId = filter.pipelineDefinitionId;
-    }
-    if (filter.projectId) {
-      innerConditions.push("project_id = @projectId");
-      params.projectId = filter.projectId;
-    }
-    if (filter.ingestionSource) {
-      innerConditions.push("ingestion_source = @ingestionSource");
-      params.ingestionSource = filter.ingestionSource;
-    }
-    if (filter.since) {
-      innerHaving.push("MIN(timestamp) >= @since");
-      params.since = filter.since;
-    }
-    if (filter.until) {
-      innerHaving.push("MAX(timestamp) <= @until");
-      params.until = filter.until;
-    }
-
-    const innerWhere = `WHERE ${innerConditions.join(" AND ")}`;
-    const innerHavingClause =
-      innerHaving.length > 0 ? `HAVING ${innerHaving.join(" AND ")}` : "";
-
-    const outerConditions: string[] = [];
-    if (filter.status) {
-      outerConditions.push("status = @status");
-      params.status = filter.status;
-    }
-    const outerWhere =
-      outerConditions.length > 0
-        ? `WHERE ${outerConditions.join(" AND ")}`
-        : "";
-
-    const limitOffset = applyPagination(params, filter);
-
-    const sql = `
-      WITH run_summary AS (
-        SELECT
-          pipeline_id,
-          MAX(pipeline_definition_id) AS pipeline_definition_id,
-          MAX(project_id)             AS project_id,
-          GROUP_CONCAT(DISTINCT agent_id) AS agents,
-          COUNT(*)                    AS event_count,
-          MIN(timestamp)              AS start_time,
-          MAX(timestamp)              AS end_time,
-          MAX(timestamp) - MIN(timestamp) AS duration_ms,
-          MIN(ingestion_source)       AS ingestion_source,
-          MAX(CASE WHEN level = 'error' THEN 1 ELSE 0 END)     AS has_error,
-          MAX(CASE WHEN type = 'session_end' THEN 1 ELSE 0 END) AS has_end
-        FROM events
-        ${innerWhere}
-        GROUP BY pipeline_id
-        ${innerHavingClause}
-      )
-      SELECT *,
-        CASE
-          WHEN has_error = 1 THEN 'failed'
-          WHEN has_end = 1   THEN 'completed'
-          ELSE 'running'
-        END AS status
-      FROM run_summary
-      ${outerWhere}
-      ORDER BY start_time DESC
-      ${limitOffset}
-    `;
+    const { sql, params } = this.buildRunsQuery(filter, {
+      withPagination: true,
+    });
 
     interface RunRow {
       pipeline_id: string;
@@ -415,6 +349,7 @@ export class SQLiteEventStore implements EventStore {
       ingestion_source: string;
       has_error: number;
       has_end: number;
+      cost: number | null;
       status: "running" | "completed" | "failed";
     }
 
@@ -431,7 +366,228 @@ export class SQLiteEventStore implements EventStore {
       status: r.status,
       ingestionSource:
         r.ingestion_source as PipelineRunSummary["ingestionSource"],
+      cost: r.cost ?? undefined,
     }));
+  }
+
+  getRunsCount(filter: RunFilter): number {
+    const { sql, params } = this.buildRunsQuery(filter, {
+      withPagination: false,
+      countOnly: true,
+    });
+    const row = this.db.prepare(sql).get(params) as { total: number };
+    return row.total;
+  }
+
+  /**
+   * Builds the runs CTE query shared by getRuns and getRunsCount. When
+   * countOnly is true, returns SELECT COUNT(*) wrapping the same CTE — guaranteeing
+   * total count and visible rows always agree on filter semantics.
+   */
+  private buildRunsQuery(
+    filter: RunFilter,
+    opts: { withPagination: boolean; countOnly?: boolean },
+  ): { sql: string; params: Record<string, unknown> } {
+    const innerConditions: string[] = ["pipeline_id IS NOT NULL"];
+    const innerHaving: string[] = [];
+    const params: Record<string, unknown> = {};
+
+    if (filter.pipelineDefinitionId) {
+      innerConditions.push("pipeline_definition_id = @pipelineDefinitionId");
+      params.pipelineDefinitionId = filter.pipelineDefinitionId;
+    }
+    if (filter.projectId) {
+      innerConditions.push("project_id = @projectId");
+      params.projectId = filter.projectId;
+    }
+    if (filter.ingestionSource) {
+      const sources = Array.isArray(filter.ingestionSource)
+        ? filter.ingestionSource
+        : [filter.ingestionSource];
+      if (sources.length > 0) {
+        const placeholders = sources.map((_, i) => `@ingestionSource_${i}`);
+        innerConditions.push(
+          `ingestion_source IN (${placeholders.join(", ")})`,
+        );
+        sources.forEach((s, i) => {
+          params[`ingestionSource_${i}`] = s;
+        });
+      }
+    }
+    if (filter.search) {
+      // Substring on pipeline_id OR pipeline_definition_id, case-insensitive.
+      // Escape SQLite LIKE metacharacters (%, _) and the escape char (\) itself
+      // so that user input like "my_app" matches literal underscore, not any char.
+      const escaped = filter.search.replace(/[\\%_]/g, "\\$&");
+      innerConditions.push(
+        "(pipeline_id LIKE @search ESCAPE '\\' COLLATE NOCASE OR pipeline_definition_id LIKE @search ESCAPE '\\' COLLATE NOCASE)",
+      );
+      params.search = `%${escaped}%`;
+    }
+    if (filter.since) {
+      innerHaving.push("MIN(timestamp) >= @since");
+      params.since = filter.since;
+    }
+    if (filter.until) {
+      innerHaving.push("MAX(timestamp) <= @until");
+      params.until = filter.until;
+    }
+
+    const innerWhere = `WHERE ${innerConditions.join(" AND ")}`;
+    const innerHavingClause =
+      innerHaving.length > 0 ? `HAVING ${innerHaving.join(" AND ")}` : "";
+
+    const outerConditions: string[] = [];
+    if (filter.status) {
+      const statuses = Array.isArray(filter.status)
+        ? filter.status
+        : [filter.status];
+      if (statuses.length > 0) {
+        const placeholders = statuses.map((_, i) => `@status_${i}`);
+        outerConditions.push(`status IN (${placeholders.join(", ")})`);
+        statuses.forEach((s, i) => {
+          params[`status_${i}`] = s;
+        });
+      }
+    }
+    const outerWhere =
+      outerConditions.length > 0
+        ? `WHERE ${outerConditions.join(" AND ")}`
+        : "";
+
+    const cte = `
+      WITH run_summary AS (
+        SELECT
+          pipeline_id,
+          MAX(pipeline_definition_id) AS pipeline_definition_id,
+          MAX(project_id)             AS project_id,
+          GROUP_CONCAT(DISTINCT agent_id) AS agents,
+          COUNT(*)                    AS event_count,
+          MIN(timestamp)              AS start_time,
+          MAX(timestamp)              AS end_time,
+          MAX(timestamp) - MIN(timestamp) AS duration_ms,
+          MIN(ingestion_source)       AS ingestion_source,
+          MAX(CASE WHEN level = 'error' THEN 1 ELSE 0 END)     AS has_error,
+          MAX(CASE WHEN type = 'session_end' THEN 1 ELSE 0 END) AS has_end,
+          MAX(CASE WHEN type = 'session_end' THEN CAST(json_extract(payload, '$.totalCost') AS REAL) END) AS cost
+        FROM events
+        ${innerWhere}
+        GROUP BY pipeline_id
+        ${innerHavingClause}
+      )
+    `;
+
+    if (opts.countOnly) {
+      const sql = `${cte}
+        SELECT COUNT(*) AS total FROM (
+          SELECT
+            CASE
+              WHEN has_error = 1 THEN 'failed'
+              WHEN has_end = 1   THEN 'completed'
+              ELSE 'running'
+            END AS status
+          FROM run_summary
+        ) sub
+        ${outerWhere}
+      `;
+      return { sql, params };
+    }
+
+    // Whitelist sort keys → SQL columns. Never interpolate user input directly.
+    const sortColumns: Record<RunSortKey, string> = {
+      startTime: "start_time",
+      durationMs: "duration_ms",
+      eventCount: "event_count",
+      cost: "cost",
+      pipelineDefinitionId: "pipeline_definition_id",
+      status: "status",
+    };
+    const sortColumn = sortColumns[filter.sortBy ?? "startTime"];
+    const sortDir = filter.sortDir === "asc" ? "ASC" : "DESC";
+    // Stable secondary sort by pipeline_id keeps pagination deterministic
+    // when the primary sort key has ties.
+    const orderBy = `ORDER BY ${sortColumn} ${sortDir} NULLS LAST, pipeline_id ASC`;
+
+    const limitOffset = opts.withPagination
+      ? applyPagination(params, filter)
+      : "";
+
+    const sql = `${cte}
+      SELECT *,
+        CASE
+          WHEN has_error = 1 THEN 'failed'
+          WHEN has_end = 1   THEN 'completed'
+          ELSE 'running'
+        END AS status
+      FROM run_summary
+      ${outerWhere}
+      ${orderBy}
+      ${limitOffset}
+    `;
+    return { sql, params };
+  }
+
+  getRunDurationTrends(
+    pipelineDefinitionIds: string[],
+    perPipelineLimit: number,
+  ): RunDurationTrends {
+    const result: RunDurationTrends = {};
+    if (pipelineDefinitionIds.length === 0) return result;
+
+    const limit = Math.max(1, Math.min(perPipelineLimit, 100));
+    const placeholders = pipelineDefinitionIds.map((_, i) => `@id_${i}`);
+    const params: Record<string, unknown> = { limit };
+    pipelineDefinitionIds.forEach((id, i) => {
+      params[`id_${i}`] = id;
+    });
+
+    // Per-run start_time and duration, ranked newest-first within each
+    // pipeline_definition_id, then keep the top N per group.
+    const sql = `
+      WITH per_run AS (
+        SELECT
+          pipeline_id,
+          pipeline_definition_id,
+          MIN(timestamp) AS start_time,
+          MAX(timestamp) - MIN(timestamp) AS duration_ms
+        FROM events
+        WHERE pipeline_id IS NOT NULL
+          AND pipeline_definition_id IN (${placeholders.join(", ")})
+        GROUP BY pipeline_id
+      ),
+      ranked AS (
+        SELECT
+          pipeline_definition_id,
+          start_time,
+          duration_ms,
+          ROW_NUMBER() OVER (
+            PARTITION BY pipeline_definition_id
+            ORDER BY start_time DESC
+          ) AS rn
+        FROM per_run
+      )
+      SELECT pipeline_definition_id, start_time, duration_ms
+      FROM ranked
+      WHERE rn <= @limit
+      ORDER BY pipeline_definition_id ASC, start_time ASC
+    `;
+
+    interface TrendRow {
+      pipeline_definition_id: string;
+      start_time: number;
+      duration_ms: number;
+    }
+    const rows = this.db.prepare(sql).all(params) as TrendRow[];
+    for (const id of pipelineDefinitionIds) {
+      result[id] = [];
+    }
+    for (const r of rows) {
+      result[r.pipeline_definition_id]?.push({
+        startTime: r.start_time,
+        durationMs: r.duration_ms,
+      });
+    }
+    return result;
   }
 
   getRunDetail(pipelineId: string): RunDetail | null {

@@ -202,11 +202,26 @@ export interface SessionFilter {
   offset?: number;
 }
 
+export type RunStatus = "running" | "completed" | "failed";
+
+export type RunSortKey =
+  | "startTime"
+  | "durationMs"
+  | "eventCount"
+  | "cost"
+  | "pipelineDefinitionId"
+  | "status";
+
+export type RunSortDir = "asc" | "desc";
+
 export interface RunFilter {
   pipelineDefinitionId?: string;
   projectId?: string;
-  ingestionSource?: IngestionSource;
-  status?: "running" | "completed" | "failed";
+  ingestionSource?: IngestionSource | IngestionSource[];
+  status?: RunStatus | RunStatus[];
+  search?: string;
+  sortBy?: RunSortKey;
+  sortDir?: RunSortDir;
   since?: number;
   until?: number;
   limit?: number;
@@ -239,9 +254,22 @@ export interface PipelineRunSummary {
   startTime: number;
   endTime?: number;
   durationMs?: number;
-  status: "running" | "completed" | "failed";
+  status: RunStatus;
   ingestionSource?: IngestionSource;
+  cost?: number;
 }
+
+export interface RunListResult {
+  rows: PipelineRunSummary[];
+  total: number;
+}
+
+export interface RunDurationPoint {
+  startTime: number;
+  durationMs: number;
+}
+
+export type RunDurationTrends = Record<string, RunDurationPoint[]>;
 
 export interface PipelineDefinitionSummary {
   pipelineDefinitionId: string;
@@ -264,7 +292,7 @@ export interface RunDetail {
   pipelineId: string;
   pipelineDefinitionId?: string;
   projectId?: string;
-  status: "running" | "completed" | "failed";
+  status: RunStatus;
   startTime: number;
   endTime?: number;
   durationMs?: number;
@@ -306,6 +334,11 @@ export interface EventStore {
   getEvents(filter: EventFilter): AgentWatchEvent[];
   getSessions(filter: SessionFilter): SessionSummary[];
   getRuns(filter: RunFilter): PipelineRunSummary[];
+  getRunsCount(filter: RunFilter): number;
+  getRunDurationTrends(
+    pipelineDefinitionIds: string[],
+    perPipelineLimit: number,
+  ): RunDurationTrends;
   getRunDetail(pipelineId: string): RunDetail | null;
   compareRuns(a: string, b: string): RunComparison | null;
   getProjectSummaries(): ProjectSummary[];

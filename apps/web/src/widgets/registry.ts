@@ -10,10 +10,10 @@ export const widgetRegistry: WidgetDefinition[] = [
     type: "runs-table",
     name: "Runs Table",
     description: "Filterable list of recent sessions/runs",
-    defaultW: 8,
-    defaultH: 8,
-    minW: 4,
-    minH: 4,
+    defaultW: 12,
+    defaultH: 10,
+    minW: 6,
+    minH: 6,
     component: RunsTableWidget,
   },
   {
@@ -65,7 +65,22 @@ export function getWidgetDefinition(
 }
 
 const defaultConfigs: Record<WidgetType, Record<string, unknown>> = {
-  "runs-table": { limit: 50 },
+  "runs-table": {
+    pageSize: 25,
+    sort: { key: "startTime", dir: "desc" },
+    columnVisibility: {
+      pipeline: true,
+      status: true,
+      started: true,
+      duration: true,
+      events: true,
+      cost: true,
+      trend: true,
+      source: true,
+    },
+    filters: { search: "", statuses: [], sources: [] },
+    costThreshold: 0.5,
+  },
   "session-waterfall": {},
   "cost-trend": { range: "7d" },
   "tool-breakdown": { range: "7d", metric: "tool.count" },

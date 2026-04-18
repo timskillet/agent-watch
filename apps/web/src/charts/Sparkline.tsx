@@ -3,7 +3,7 @@ import { getSeriesColor } from "./theme";
 
 type Dimension = number | `${number}%`;
 
-interface SparklineProps<T extends Record<string, unknown>> {
+interface SparklineProps<T extends object> {
   data: T[];
   yKey: keyof T & string;
   width?: Dimension;
@@ -11,7 +11,7 @@ interface SparklineProps<T extends Record<string, unknown>> {
   color?: string;
 }
 
-export function Sparkline<T extends Record<string, unknown>>({
+export function Sparkline<T extends object>({
   data,
   yKey,
   width = "100%",

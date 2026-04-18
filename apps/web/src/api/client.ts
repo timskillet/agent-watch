@@ -4,9 +4,10 @@ import type {
   RunFilter,
   SessionSummary,
   AgentWatchEvent,
-  PipelineRunSummary,
+  RunListResult,
   RunDetail,
   RunComparison,
+  RunDurationTrends,
   ProjectSummary,
   PanelQuery,
   PanelResult,
@@ -64,8 +65,25 @@ export function getEvents(
   return fetchJson(`/api/events${buildQuery(params)}`, []);
 }
 
-export function getRuns(filter: RunFilter = {}): Promise<PipelineRunSummary[]> {
-  return fetchJson(`/api/runs${buildQuery({ ...filter })}`, []);
+export function getRuns(filter: RunFilter = {}): Promise<RunListResult> {
+  return fetchJson(`/api/runs${buildQuery({ ...filter })}`, {
+    rows: [],
+    total: 0,
+  });
+}
+
+export function getRunDurationTrends(
+  pipelineDefinitionIds: string[],
+  limit = 10,
+): Promise<RunDurationTrends> {
+  if (pipelineDefinitionIds.length === 0) return Promise.resolve({});
+  return fetchJson(
+    `/api/runs/trends${buildQuery({
+      pipelineDefinitionIds,
+      limit,
+    })}`,
+    { trends: {} } as { trends: RunDurationTrends },
+  ).then((r) => r.trends);
 }
 
 export function getRunDetail(pipelineId: string): Promise<RunDetail | null> {

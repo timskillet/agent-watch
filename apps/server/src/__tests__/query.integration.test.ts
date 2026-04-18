@@ -94,6 +94,7 @@ function seedTestData(store: SQLiteEventStore): void {
       level: "info",
       timestamp: 1700000003000,
       sequence: 4,
+      payload: { durationMs: 3000, totalCost: 0.42, totalTokens: 1500 },
       meta: { ingestion_source: "claude_code_hook" },
     }),
 
@@ -296,6 +297,121 @@ describe("EventStore query methods", () => {
       const page = store.getRuns({ limit: 2 });
       expect(page).toHaveLength(2);
     });
+
+    it("filters by status array (multi-select)", () => {
+      const runs = store.getRuns({ status: ["completed", "failed"] });
+      expect(runs).toHaveLength(2);
+      const ids = runs.map((r) => r.pipelineId).sort();
+      expect(ids).toEqual(["run-1", "run-2"]);
+    });
+
+    it("filters by ingestionSource array", () => {
+      const runs = store.getRuns({
+        ingestionSource: ["claude_code_hook"],
+      });
+      // run-1 and run-3 are CC hook
+      expect(runs.map((r) => r.pipelineId).sort()).toEqual(["run-1", "run-3"]);
+    });
+
+    it("filters by search substring (case-insensitive)", () => {
+      const runs = store.getRuns({ search: "OTHER" });
+      expect(runs).toHaveLength(1);
+      expect(runs[0].pipelineId).toBe("run-3");
+    });
+
+    it("escapes LIKE metacharacters in search input", () => {
+      // Seed two pipelines: one with a literal underscore, one without.
+      store.insert([
+        makeEvent({
+          id: "evt-meta-1",
+          sessionId: "sess-meta-1",
+          pipelineId: "run-meta-1",
+          pipelineDefinitionId: "my_app",
+          type: "session_start",
+          timestamp: 1700000100000,
+          sequence: 1,
+        }),
+        makeEvent({
+          id: "evt-meta-2",
+          sessionId: "sess-meta-2",
+          pipelineId: "run-meta-2",
+          pipelineDefinitionId: "myXapp",
+          type: "session_start",
+          timestamp: 1700000200000,
+          sequence: 1,
+        }),
+      ]);
+
+      // Underscore must match literally, not as a single-char wildcard.
+      const ids = store
+        .getRuns({ search: "my_app" })
+        .map((r) => r.pipelineDefinitionId);
+      expect(ids).toContain("my_app");
+      expect(ids).not.toContain("myXapp");
+    });
+
+    it("sorts by durationMs ascending", () => {
+      const runs = store.getRuns({ sortBy: "durationMs", sortDir: "asc" });
+      const durations = runs.map((r) => r.durationMs ?? 0);
+      const sorted = [...durations].sort((a, b) => a - b);
+      expect(durations).toEqual(sorted);
+    });
+
+    it("sorts by eventCount descending", () => {
+      const runs = store.getRuns({ sortBy: "eventCount", sortDir: "desc" });
+      // run-1=4 events, run-2=3, run-3=2
+      expect(runs.map((r) => r.pipelineId)).toEqual([
+        "run-1",
+        "run-2",
+        "run-3",
+      ]);
+    });
+
+    it("aggregates cost from session_end payload", () => {
+      const run1 = store.getRuns({}).find((r) => r.pipelineId === "run-1");
+      expect(run1?.cost).toBe(0.42);
+      const run3 = store.getRuns({}).find((r) => r.pipelineId === "run-3");
+      // running, no session_end
+      expect(run3?.cost).toBeUndefined();
+    });
+
+    it("returns total count consistent with filter (getRunsCount)", () => {
+      expect(store.getRunsCount({})).toBe(3);
+      expect(store.getRunsCount({ status: "failed" })).toBe(1);
+      expect(store.getRunsCount({ status: ["completed", "failed"] })).toBe(2);
+      expect(store.getRunsCount({ search: "nonexistent-xyz" })).toBe(0);
+      // Pagination must NOT affect total count
+      expect(store.getRunsCount({ limit: 1 })).toBe(3);
+    });
+  });
+
+  // --- getRunDurationTrends ---
+
+  describe("getRunDurationTrends", () => {
+    it("returns trend points keyed by pipelineDefinitionId", () => {
+      const trends = store.getRunDurationTrends(["my-app", "other-app"], 10);
+      expect(trends["my-app"]).toBeDefined();
+      expect(trends["other-app"]).toBeDefined();
+      // my-app has run-1 (3000ms) and run-2 (2000ms)
+      expect(trends["my-app"]).toHaveLength(2);
+      // other-app has run-3 only
+      expect(trends["other-app"]).toHaveLength(1);
+    });
+
+    it("respects perPipelineLimit", () => {
+      const trends = store.getRunDurationTrends(["my-app"], 1);
+      // newest run kept; others trimmed
+      expect(trends["my-app"]).toHaveLength(1);
+    });
+
+    it("returns empty trends for unknown ids", () => {
+      const trends = store.getRunDurationTrends(["does-not-exist"], 10);
+      expect(trends["does-not-exist"]).toEqual([]);
+    });
+
+    it("returns empty object when given no ids", () => {
+      expect(store.getRunDurationTrends([], 10)).toEqual({});
+    });
   });
 
   // --- getRunDetail ---
@@ -465,10 +581,12 @@ describe("Query API routes", () => {
 
   // --- Runs ---
 
-  it("GET /api/runs returns all runs", async () => {
+  it("GET /api/runs returns {rows, total}", async () => {
     const res = await app.inject({ method: "GET", url: "/api/runs" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toHaveLength(3);
+    const body = res.json();
+    expect(body.rows).toHaveLength(3);
+    expect(body.total).toBe(3);
   });
 
   it("GET /api/runs filters by status", async () => {
@@ -478,8 +596,64 @@ describe("Query API routes", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].pipelineId).toBe("run-1");
+    expect(body.rows).toHaveLength(1);
+    expect(body.total).toBe(1);
+    expect(body.rows[0].pipelineId).toBe("run-1");
+  });
+
+  it("GET /api/runs accepts comma-separated status list", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs?status=completed,failed",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBe(2);
+    expect(
+      body.rows.map((r: { pipelineId: string }) => r.pipelineId).sort(),
+    ).toEqual(["run-1", "run-2"]);
+  });
+
+  it("GET /api/runs supports search + sort + pagination together", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs?search=run&sortBy=eventCount&sortDir=asc&limit=2",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // search matches all 3 (pipeline_id contains "run"); pagination caps to 2
+    expect(body.rows).toHaveLength(2);
+    expect(body.total).toBe(3);
+    // Asc by eventCount: run-3 (2 events) first
+    expect(body.rows[0].pipelineId).toBe("run-3");
+  });
+
+  it("GET /api/runs/trends returns trend points", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs/trends?pipelineDefinitionIds=my-app,other-app&limit=5",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.trends["my-app"]).toHaveLength(2);
+    expect(body.trends["other-app"]).toHaveLength(1);
+  });
+
+  it("GET /api/runs/trends returns empty when no ids given", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs/trends",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().trends).toEqual({});
+  });
+
+  it("GET /api/runs returns 400 for invalid sortBy", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/runs?sortBy=injection;DROP",
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it("GET /api/runs/:pipelineId returns run detail", async () => {
