@@ -8,6 +8,8 @@ import type {
   RunDetail,
   RunComparison,
   ProjectSummary,
+  PanelQuery,
+  PanelResult,
 } from "@agentwatch/types";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
@@ -79,4 +81,8 @@ export function compareRuns(
 
 export function getProjects(): Promise<ProjectSummary[]> {
   return fetchJson("/api/projects", []);
+}
+
+export function getPanelData(query: PanelQuery = {}): Promise<PanelResult> {
+  return fetchJson(`/api/panels${buildQuery({ ...query })}`, { rows: [] });
 }
