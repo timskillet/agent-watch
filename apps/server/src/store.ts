@@ -415,11 +415,14 @@ export class SQLiteEventStore implements EventStore {
       }
     }
     if (filter.search) {
-      // Substring on pipeline_id OR pipeline_definition_id, case-insensitive
+      // Substring on pipeline_id OR pipeline_definition_id, case-insensitive.
+      // Escape SQLite LIKE metacharacters (%, _) and the escape char (\) itself
+      // so that user input like "my_app" matches literal underscore, not any char.
+      const escaped = filter.search.replace(/[\\%_]/g, "\\$&");
       innerConditions.push(
-        "(pipeline_id LIKE @search COLLATE NOCASE OR pipeline_definition_id LIKE @search COLLATE NOCASE)",
+        "(pipeline_id LIKE @search ESCAPE '\\' COLLATE NOCASE OR pipeline_definition_id LIKE @search ESCAPE '\\' COLLATE NOCASE)",
       );
-      params.search = `%${filter.search}%`;
+      params.search = `%${escaped}%`;
     }
     if (filter.since) {
       innerHaving.push("MIN(timestamp) >= @since");

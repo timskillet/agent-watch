@@ -319,6 +319,37 @@ describe("EventStore query methods", () => {
       expect(runs[0].pipelineId).toBe("run-3");
     });
 
+    it("escapes LIKE metacharacters in search input", () => {
+      // Seed two pipelines: one with a literal underscore, one without.
+      store.insert([
+        makeEvent({
+          id: "evt-meta-1",
+          sessionId: "sess-meta-1",
+          pipelineId: "run-meta-1",
+          pipelineDefinitionId: "my_app",
+          type: "session_start",
+          timestamp: 1700000100000,
+          sequence: 1,
+        }),
+        makeEvent({
+          id: "evt-meta-2",
+          sessionId: "sess-meta-2",
+          pipelineId: "run-meta-2",
+          pipelineDefinitionId: "myXapp",
+          type: "session_start",
+          timestamp: 1700000200000,
+          sequence: 1,
+        }),
+      ]);
+
+      // Underscore must match literally, not as a single-char wildcard.
+      const ids = store
+        .getRuns({ search: "my_app" })
+        .map((r) => r.pipelineDefinitionId);
+      expect(ids).toContain("my_app");
+      expect(ids).not.toContain("myXapp");
+    });
+
     it("sorts by durationMs ascending", () => {
       const runs = store.getRuns({ sortBy: "durationMs", sortDir: "asc" });
       const durations = runs.map((r) => r.durationMs ?? 0);
