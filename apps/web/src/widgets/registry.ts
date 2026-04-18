@@ -68,7 +68,7 @@ const defaultConfigs: Record<WidgetType, Record<string, unknown>> = {
   "runs-table": { limit: 50 },
   "session-waterfall": {},
   "cost-trend": { range: "7d" },
-  "tool-breakdown": { range: "7d", metric: "count" },
+  "tool-breakdown": { range: "7d", metric: "tool.count" },
   "stats-summary": {},
 };
 

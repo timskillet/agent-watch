@@ -1,13 +1,21 @@
 .grid {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   height: 100%;
 }
 
 .card {
-  min-width: 100px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sparkline {
+  height: 24px;
+  margin-top: 2px;
 }
 
 .label {
