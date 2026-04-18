@@ -1,7 +1,6 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { SelectionProvider } from "../context/SelectionContext";
-
-const SIDEBAR_WIDTH = 200;
+import styles from "./Layout.module.css";
 
 const NAV_LINKS = [
   { to: "/", label: "Dashboard" },
@@ -18,35 +17,15 @@ export function Layout() {
   const { pathname } = useLocation();
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside
-        style={{
-          width: SIDEBAR_WIDTH,
-          flexShrink: 0,
-          borderRight: "1px solid #333",
-          background: "#1a1a2e",
-          padding: "16px 12px",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <Link
-          to="/"
-          style={{
-            textDecoration: "none",
-            color: "#e0e0e0",
-            fontWeight: "bold",
-            fontSize: 15,
-            marginBottom: 20,
-            display: "block",
-          }}
-        >
+    <div className={styles.layout}>
+      <aside className={styles.sidebar}>
+        <Link to="/" className={styles.logo}>
           AgentWatch
         </Link>
 
-        <div style={{ marginBottom: 16 }}>
-          <div style={sectionLabel}>Navigation</div>
-          <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div className={styles.section}>
+          <div className={styles.sectionLabel}>Navigation</div>
+          <nav className={styles.nav}>
             {NAV_LINKS.map(({ to, label }) => {
               const active =
                 to === "/" ? pathname === "/" : pathname.startsWith(to);
@@ -54,16 +33,7 @@ export function Layout() {
                 <Link
                   key={to}
                   to={to}
-                  style={{
-                    color: active ? "#8b9cf7" : "#888",
-                    textDecoration: "none",
-                    fontSize: 13,
-                    padding: "6px 8px",
-                    borderRadius: 4,
-                    background: active
-                      ? "rgba(139,156,247,0.1)"
-                      : "transparent",
-                  }}
+                  className={`${styles.navLink} ${active ? styles.navLinkActive : ""}`}
                 >
                   {label}
                 </Link>
@@ -72,59 +42,28 @@ export function Layout() {
           </nav>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <div style={sectionLabel}>Recent Runs</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div className={styles.section}>
+          <div className={styles.sectionLabel}>Recent Runs</div>
+          <div className={styles.recentRuns}>
             {PLACEHOLDER_RUNS.map(({ id, time }) => (
-              <div
-                key={id}
-                style={{
-                  color: "#ccc",
-                  fontSize: 12,
-                  padding: "5px 8px",
-                  borderRadius: 4,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {id}
-                </span>
-                <span style={{ color: "#666", fontSize: 10, flexShrink: 0 }}>
-                  {time}
-                </span>
+              <div key={id} className={styles.runItem}>
+                <span className={styles.runId}>{id}</span>
+                <span className={styles.runTime}>{time}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ marginTop: "auto" }}>
-          <div style={sectionLabel}>Project</div>
-          <div
-            style={{
-              color: "#aaa",
-              fontSize: 12,
-              border: "1px solid #333",
-              padding: "6px 8px",
-              borderRadius: 4,
-              display: "flex",
-              justifyContent: "space-between",
-            }}
-          >
+        <div className={styles.sectionBottom}>
+          <div className={styles.sectionLabel}>Project</div>
+          <div className={styles.projectSelector}>
             <span>All Projects</span>
-            <span style={{ color: "#555" }}>{"\u25BE"}</span>
+            <span className={styles.projectArrow}>{"\u25BE"}</span>
           </div>
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: 16 }}>
+      <main className={styles.main}>
         <SelectionProvider>
           <Outlet />
         </SelectionProvider>
@@ -132,11 +71,3 @@ export function Layout() {
     </div>
   );
 }
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 10,
-  textTransform: "uppercase",
-  color: "#555",
-  letterSpacing: 1,
-  marginBottom: 6,
-};

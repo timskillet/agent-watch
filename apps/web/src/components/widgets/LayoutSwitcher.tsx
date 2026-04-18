@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { presets } from "../../widgets/presets";
 import type { DashboardState } from "../../widgets/types";
+import { Button } from "../ui/Button";
+import styles from "./LayoutSwitcher.module.css";
 
 export function LayoutSwitcher({
   onLoadPreset,
@@ -25,12 +27,12 @@ export function LayoutSwitcher({
   }, [open]);
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
-      <button onClick={() => setOpen((o) => !o)} style={triggerStyle}>
+    <div ref={containerRef} className={styles.container}>
+      <Button variant="secondary" size="md" onClick={() => setOpen((o) => !o)}>
         Layouts ▾
-      </button>
+      </Button>
       {open && (
-        <div style={dropdownStyle}>
+        <div className={styles.dropdown}>
           {presets.map((p) => (
             <button
               key={p.id}
@@ -38,12 +40,10 @@ export function LayoutSwitcher({
                 onLoadPreset(p.createState());
                 setOpen(false);
               }}
-              style={itemStyle}
+              className={styles.item}
             >
-              <div style={{ fontWeight: 500, color: "#ccc" }}>{p.name}</div>
-              <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-                {p.description}
-              </div>
+              <div className={styles.itemName}>{p.name}</div>
+              <div className={styles.itemDescription}>{p.description}</div>
             </button>
           ))}
         </div>
@@ -51,36 +51,3 @@ export function LayoutSwitcher({
     </div>
   );
 }
-
-const triggerStyle: React.CSSProperties = {
-  background: "#2a2a3e",
-  color: "#ccc",
-  border: "1px solid #444",
-  borderRadius: 4,
-  padding: "5px 12px",
-  cursor: "pointer",
-  fontSize: 12,
-};
-const dropdownStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  marginTop: 4,
-  background: "#1e1e38",
-  border: "1px solid #444",
-  borderRadius: 6,
-  padding: 4,
-  minWidth: 240,
-  zIndex: 100,
-};
-const itemStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  textAlign: "left",
-  background: "none",
-  border: "none",
-  padding: "8px 10px",
-  cursor: "pointer",
-  borderRadius: 4,
-  fontSize: 12,
-};

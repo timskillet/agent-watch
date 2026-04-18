@@ -3,6 +3,11 @@ import type { PipelineRunSummary } from "@agentwatch/types";
 import { getRuns } from "../../api/client";
 import { useSelection } from "../../context/SelectionContext";
 import type { WidgetProps } from "../../widgets/types";
+import { Badge } from "../ui/Badge";
+import { Select } from "../ui/Select";
+import { Skeleton } from "../ui/Skeleton";
+import { EmptyState } from "../ui/EmptyState";
+import styles from "./RunsTableWidget.module.css";
 
 export function RunsTableWidget({
   config,
@@ -34,46 +39,38 @@ export function RunsTableWidget({
 
   if (isConfigOpen) {
     return (
-      <div style={{ padding: 4 }}>
-        <label
-          style={{
-            color: "#aaa",
-            fontSize: 12,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
+      <div className={styles.configPanel}>
+        <label className={styles.configLabel}>
           Max rows:
-          <select
+          <Select
             value={String(limit)}
             onChange={(e) =>
               onConfigChange({ ...config, limit: Number(e.target.value) })
             }
-            style={selectStyle}
           >
             <option value="10">10</option>
             <option value="25">25</option>
             <option value="50">50</option>
             <option value="100">100</option>
-          </select>
+          </Select>
         </label>
       </div>
     );
   }
 
-  if (loading) return <Muted>Loading runs...</Muted>;
-  if (runs.length === 0) return <Muted>No runs found</Muted>;
+  if (loading) return <Skeleton variant="row" lines={5} />;
+  if (runs.length === 0)
+    return <EmptyState icon="📋" message="No runs found" />;
 
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+    <table className={styles.table}>
       <thead>
-        <tr style={{ borderBottom: "1px solid #333" }}>
-          <th style={th}>Pipeline</th>
-          <th style={th}>Status</th>
-          <th style={th}>Events</th>
-          <th style={th}>Duration</th>
-          <th style={th}>Time</th>
+        <tr>
+          <th>Pipeline</th>
+          <th>Status</th>
+          <th>Events</th>
+          <th>Duration</th>
+          <th>Time</th>
         </tr>
       </thead>
       <tbody>
@@ -81,30 +78,19 @@ export function RunsTableWidget({
           <tr
             key={run.pipelineId}
             onClick={() => setSelectedSessionId(run.pipelineId)}
-            style={{
-              cursor: "pointer",
-              borderBottom: "1px solid #2a2a3e",
-              background:
-                run.pipelineId === selectedSessionId
-                  ? "rgba(139,156,247,0.15)"
-                  : "transparent",
-            }}
+            className={`${styles.row} ${run.pipelineId === selectedSessionId ? styles.rowSelected : ""}`}
           >
-            <td style={td}>
-              {run.pipelineDefinitionId ?? run.pipelineId.slice(0, 8)}
+            <td>{run.pipelineDefinitionId ?? run.pipelineId.slice(0, 8)}</td>
+            <td>
+              <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
             </td>
-            <td style={td}>
-              <span style={{ color: statusColor(run.status), fontSize: 11 }}>
-                {run.status}
-              </span>
-            </td>
-            <td style={td}>{run.eventCount}</td>
-            <td style={td}>
+            <td>{run.eventCount}</td>
+            <td>
               {run.durationMs != null
                 ? `${(run.durationMs / 1000).toFixed(1)}s`
                 : "\u2014"}
             </td>
-            <td style={td}>{new Date(run.startTime).toLocaleTimeString()}</td>
+            <td>{new Date(run.startTime).toLocaleTimeString()}</td>
           </tr>
         ))}
       </tbody>
@@ -112,29 +98,11 @@ export function RunsTableWidget({
   );
 }
 
-function statusColor(status: string): string {
-  if (status === "completed") return "#4ade80";
-  if (status === "running") return "#60a5fa";
-  if (status === "failed") return "#f87171";
-  return "#888";
+function statusVariant(
+  status: string,
+): "success" | "info" | "error" | "neutral" {
+  if (status === "completed") return "success";
+  if (status === "running") return "info";
+  if (status === "failed") return "error";
+  return "neutral";
 }
-
-function Muted({ children }: { children: string }) {
-  return <div style={{ color: "#666", fontSize: 12 }}>{children}</div>;
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "4px 8px",
-  fontWeight: 500,
-  color: "#888",
-};
-const td: React.CSSProperties = { padding: "6px 8px", color: "#ccc" };
-const selectStyle: React.CSSProperties = {
-  background: "#2a2a3e",
-  color: "#ccc",
-  border: "1px solid #444",
-  borderRadius: 4,
-  padding: "2px 6px",
-  fontSize: 12,
-};

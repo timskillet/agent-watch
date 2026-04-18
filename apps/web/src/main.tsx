@@ -1,3 +1,4 @@
+import "./styles/global.css";
 import "react-grid-layout/css/styles.css";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
