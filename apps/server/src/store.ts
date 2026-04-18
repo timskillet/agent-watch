@@ -518,7 +518,146 @@ export class SQLiteEventStore implements EventStore {
     run();
   }
 
-  getPanelData(_query: PanelQuery): PanelResult {
+  getPanelData(query: PanelQuery): PanelResult {
+    const range = query.range ?? "7d";
+    const days = range === "30d" ? 30 : range === "90d" ? 90 : 7;
+    const since = Date.now() - days * 86_400_000;
+    const limit = Math.min(query.limit ?? 50, 500);
+    const metric = query.metric;
+    const groupBy =
+      query.groupBy ?? (metric?.startsWith("tool.") ? "tool_name" : "day");
+
+    // Session-level metrics bucketed by day
+    if (groupBy === "day" && metric != null) {
+      const agg =
+        metric === "session.duration"
+          ? "AVG(CAST(json_extract(payload, '$.durationMs') AS REAL))"
+          : metric === "token.usage"
+            ? "SUM(CAST(json_extract(payload, '$.totalTokens') AS REAL))"
+            : metric === "session.cost"
+              ? "SUM(CAST(json_extract(payload, '$.totalCost') AS REAL))"
+              : null;
+      if (agg == null) return { rows: [] };
+
+      const sql = `
+        SELECT date(timestamp / 1000, 'unixepoch') AS day,
+               ${agg} AS value
+        FROM events
+        WHERE type = 'session_end'
+          AND timestamp >= @since
+          AND json_extract(payload, '$.${
+            metric === "session.duration"
+              ? "durationMs"
+              : metric === "token.usage"
+                ? "totalTokens"
+                : "totalCost"
+          }') IS NOT NULL
+        GROUP BY day
+        ORDER BY day ASC
+        LIMIT @limit
+      `;
+      interface Row {
+        day: string;
+        value: number | null;
+      }
+      const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+      return {
+        rows: rows.map((r) => ({ day: r.day, value: r.value ?? 0 })),
+      };
+    }
+
+    // Tool-level metrics grouped by tool_name
+    if (groupBy === "tool_name") {
+      if (metric === "tool.count") {
+        const sql = `
+          SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
+                 COUNT(*) AS value
+          FROM events
+          WHERE type = 'tool_call'
+            AND timestamp >= @since
+          GROUP BY tool
+          HAVING tool IS NOT NULL
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          tool: string;
+          value: number;
+        }
+        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        return { rows: rows.map((r) => ({ tool: r.tool, value: r.value })) };
+      }
+
+      if (metric === "tool.duration") {
+        const sql = `
+          SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
+                 SUM(duration_ms) AS value
+          FROM events
+          WHERE type = 'tool_call'
+            AND timestamp >= @since
+            AND duration_ms IS NOT NULL
+          GROUP BY tool
+          HAVING tool IS NOT NULL
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          tool: string;
+          value: number | null;
+        }
+        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({ tool: r.tool, value: r.value ?? 0 })),
+        };
+      }
+
+      if (metric === "tool.failure_rate") {
+        const sql = `
+          WITH calls AS (
+            SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
+                   COUNT(*) AS n
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since
+            GROUP BY tool
+            HAVING tool IS NOT NULL
+          ),
+          errs AS (
+            SELECT json_extract(payload, '$."gen_ai.tool.name"') AS tool,
+                   COUNT(*) AS n
+            FROM events
+            WHERE type = 'tool_error'
+              AND timestamp >= @since
+            GROUP BY tool
+            HAVING tool IS NOT NULL
+          )
+          SELECT calls.tool AS tool,
+                 COALESCE(errs.n, 0) AS errors,
+                 calls.n AS calls,
+                 CAST(COALESCE(errs.n, 0) AS REAL) / calls.n AS value
+          FROM calls
+          LEFT JOIN errs ON errs.tool = calls.tool
+          ORDER BY value DESC, calls.n DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          tool: string;
+          errors: number;
+          calls: number;
+          value: number;
+        }
+        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({
+            tool: r.tool,
+            value: r.value,
+            calls: r.calls,
+            errors: r.errors,
+          })),
+        };
+      }
+    }
+
     return { rows: [] };
   }
 

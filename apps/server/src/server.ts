@@ -7,6 +7,7 @@ import { registerSessionsRoute } from "./routes/sessions.js";
 import { registerEventsRoute } from "./routes/events.js";
 import { registerRunsRoute } from "./routes/runs.js";
 import { registerProjectsRoute } from "./routes/projects.js";
+import { registerPanelsRoute } from "./routes/panels.js";
 
 export interface ServerOptions {
   port: number;
@@ -29,6 +30,7 @@ export async function createServer(options: ServerOptions) {
   registerEventsRoute(app, store);
   registerRunsRoute(app, store);
   registerProjectsRoute(app, store);
+  registerPanelsRoute(app, store);
 
   const address = await app.listen({ port, host: "127.0.0.1" });
 
