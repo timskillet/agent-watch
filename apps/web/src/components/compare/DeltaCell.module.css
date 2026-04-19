@@ -1,0 +1,54 @@
+.value {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.missing {
+  color: var(--color-text-muted);
+}
+
+.divergent {
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.worse {
+  color: var(--color-error);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.worseStrong {
+  color: var(--color-error);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.better {
+  color: var(--color-success);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.arrow {
+  display: inline-block;
+  font-size: 0.8em;
+  margin-right: 2px;
+}
+
+.divergeBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: var(--color-error);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+}
