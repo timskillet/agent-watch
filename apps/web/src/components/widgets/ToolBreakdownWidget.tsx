@@ -80,10 +80,7 @@ function readConfig(raw: Record<string, unknown>): ToolBreakdownConfig {
   };
 }
 
-function keyForGroupBy(
-  row: Record<string, unknown>,
-  groupBy: GroupBy,
-): string {
+function keyForGroupBy(row: Record<string, unknown>, groupBy: GroupBy): string {
   if (groupBy === "tool_name") return String(row.tool ?? "");
   if (groupBy === "bash_command") return String(row.command ?? "");
   if (groupBy === "file_extension") return String(row.extension ?? "");
@@ -98,9 +95,7 @@ function formatterFor(metric: Metric): (v: number) => string {
   return (v) => v.toFixed(0);
 }
 
-function failureRateFormatter(
-  row: ChartRow,
-): (v: number) => string {
+function failureRateFormatter(row: ChartRow): (v: number) => string {
   return (v) =>
     `${(v * 100).toFixed(1)}% (${row.errors ?? 0} of ${row.calls ?? 0})`;
 }
@@ -134,8 +129,7 @@ export function ToolBreakdownWidget({
 
     const fetchCurrent = getPanelData(query);
 
-    const canCompare =
-      cfg.compareToPrevious && since != null && until != null;
+    const canCompare = cfg.compareToPrevious && since != null && until != null;
     const fetchPrev = canCompare
       ? (() => {
           const duration = until! - since!;
