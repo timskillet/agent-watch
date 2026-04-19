@@ -1,6 +1,6 @@
 import { readFile as fsReadFile } from "fs/promises";
 import { homedir } from "os";
-import { isAbsolute, join, normalize, relative, sep } from "path";
+import { isAbsolute, join, normalize, relative } from "path";
 import type { SQLiteEventStore } from "../store.js";
 
 /**
@@ -115,19 +115,17 @@ function isEnoent(err: unknown): boolean {
 
 /**
  * `cwd` comes from the hook payload (HTTP body), so we treat it as untrusted.
- * Reject anything that isn't (a) a non-empty string, (b) an absolute path,
- * (c) free of `..` segments after normalization, and (d) contained within the
- * allow-root (defaults to the server-process user's home directory).
- *
- * Without (d), a crafted POST with `cwd: "/etc"` would read any valid
- * `agentwatch.config.json` the process can access anywhere on disk.
+ * Reject anything that isn't (a) a non-empty string, (b) an absolute path, and
+ * (c) contained within the allow-root (defaults to the server-process user's
+ * home directory). `path.normalize` on an absolute path fully resolves any
+ * `..` segments, so the allow-root check catches both literal `/etc` and
+ * `/home/user/../../etc` (which normalizes to `/etc`).
  */
 function safeResolveCwd(cwd: string, allowRoot: string | null): string | null {
   if (!cwd || typeof cwd !== "string") return null;
   if (!isAbsolute(cwd)) return null;
-  const normalized = normalize(cwd);
-  if (normalized.split(sep).includes("..")) return null;
   if (allowRoot === null || allowRoot === "") return null;
+  const normalized = normalize(cwd);
   const rel = relative(allowRoot, normalized);
   // `relative` returns "" when paths are equal, and a path starting with
   // `..` (or an absolute path on Windows) when `normalized` isn't under root.

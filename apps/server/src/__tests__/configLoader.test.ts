@@ -155,10 +155,18 @@ describe("configLoader", () => {
     expect(readFile).not.toHaveBeenCalled();
   });
 
-  it("rejects cwd containing path-traversal segments", async () => {
+  it("rejects relative path-traversal (caught by the isAbsolute guard)", async () => {
     const readFile = vi.fn(async () => "{}");
     const loader = createConfigLoader(store, { readFile, allowRoot: ROOT });
     expect(await loader.loadConfigForCwd("../../../etc")).toBeNull();
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it("rejects absolute paths that normalize out of the allow-root (e.g. /home/user/../../etc)", async () => {
+    const readFile = vi.fn(async () => "{}");
+    const loader = createConfigLoader(store, { readFile, allowRoot: ROOT });
+    // `/home/user/../../etc` normalizes to `/etc`, which the allow-root check rejects.
+    expect(await loader.loadConfigForCwd(`${ROOT}/../../etc`)).toBeNull();
     expect(readFile).not.toHaveBeenCalled();
   });
 
