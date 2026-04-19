@@ -87,7 +87,7 @@ const defaultConfigs: Record<WidgetType, Record<string, unknown>> = {
     costThreshold: 0.5,
   },
   "session-waterfall": { viewMode: "time" },
-  "cost-trend": { range: "7d" },
+  "cost-trend": { range: { kind: "preset", value: "7d" } },
   "tool-breakdown": {
     range: { kind: "preset", value: "7d" },
     metric: "tool.count",
