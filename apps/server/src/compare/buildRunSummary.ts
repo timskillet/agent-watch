@@ -4,6 +4,7 @@ import type {
   RunDetail,
   RunSummaryForCompare,
 } from "@agentwatch/types";
+import { numOr0 } from "./utils.js";
 
 /**
  * Pure: roll up a {@link RunDetail} into the compare-payload shape. Excludes
@@ -74,8 +75,4 @@ function readSessionCost(events: AgentWatchEvent[]): number | undefined {
     return undefined;
   }
   return undefined;
-}
-
-function numOr0(v: unknown): number {
-  return typeof v === "number" && !Number.isNaN(v) ? v : 0;
 }

@@ -77,10 +77,14 @@ describe("matchTraces", () => {
     expect(matches[0].matchedBy).toBe("otel_trace_id");
     expect(matches[0].a?.traceId).toBe(shared);
     expect(matches[0].b?.traceId).toBe(shared);
+    // Unmatched one-sided rows were not paired via OTel id — `matchedBy`
+    // describes the per-row pairing, not the batch strategy.
     expect(matches[1].a?.traceId).toBe("11111111111111111111111111111111");
     expect(matches[1].b).toBeUndefined();
+    expect(matches[1].matchedBy).toBe("index");
     expect(matches[2].b?.traceId).toBe("22222222222222222222222222222222");
     expect(matches[2].a).toBeUndefined();
+    expect(matches[2].matchedBy).toBe("index");
   });
 
   it("falls back to index match when OTel ids differ on both sides", () => {

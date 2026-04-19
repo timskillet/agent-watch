@@ -70,12 +70,14 @@ function matchByOtelId(
     bUsed.add(tb.traceId);
   }
 
-  // 2. Append the unmatched tail of A (side b empty), preserving order.
+  // 2. Append the unmatched tail of A (side b empty), preserving order. These
+  //    rows weren't paired — `matchedBy` reflects per-row pairing, not the
+  //    batch strategy, so they fall back to "index".
   for (const ta of a) {
     if (aUsed.has(ta.traceId)) continue;
     matches.push({
       a: ta,
-      matchedBy: "otel_trace_id",
+      matchedBy: "index",
       position: matches.length,
     });
   }
@@ -84,7 +86,7 @@ function matchByOtelId(
     if (bUsed.has(tb.traceId)) continue;
     matches.push({
       b: tb,
-      matchedBy: "otel_trace_id",
+      matchedBy: "index",
       position: matches.length,
     });
   }

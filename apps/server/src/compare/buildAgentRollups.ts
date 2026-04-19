@@ -3,6 +3,7 @@ import type {
   AgentWatchEvent,
   RunDetail,
 } from "@agentwatch/types";
+import { numOr0 } from "./utils.js";
 
 /**
  * Pure: group events by `agentId` and compute per-agent counts/tokens. Agents
@@ -57,8 +58,4 @@ function summarise(agentId: string, events: AgentWatchEvent[]): AgentRollup {
     inputTokens,
     outputTokens,
   };
-}
-
-function numOr0(v: unknown): number {
-  return typeof v === "number" && !Number.isNaN(v) ? v : 0;
 }
