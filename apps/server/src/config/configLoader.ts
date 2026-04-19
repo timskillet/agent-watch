@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join, normalize, sep } from "path";
 import type { SQLiteEventStore } from "../store.js";
 
 /**
@@ -38,26 +38,35 @@ export function createConfigLoader(
   const readFile = opts.readFile ?? ((p: string) => readFileSync(p, "utf8"));
 
   function loadConfigForCwd(cwd: string): ProjectConfig | null {
-    if (!cwd) return null;
+    const safeCwd = safeResolveCwd(cwd);
+    if (safeCwd === null) return null;
     const t = now();
-    const hit = cache.get(cwd);
+    const hit = cache.get(safeCwd);
     if (hit !== undefined && t - hit.loadedAt < TTL_MS) return hit.config;
 
-    const filePath = join(cwd, CONFIG_FILENAME);
+    const filePath = join(safeCwd, CONFIG_FILENAME);
     let config: ProjectConfig | null = null;
     try {
       const raw = readFile(filePath);
       config = JSON.parse(raw) as ProjectConfig;
-      store.upsertProjectConfig(cwd, raw, t);
+      store.upsertProjectConfig(safeCwd, raw, t);
     } catch (err) {
       if (!isEnoent(err)) throw err;
     }
-    cache.set(cwd, { config, loadedAt: t });
+    cache.set(safeCwd, { config, loadedAt: t });
     return config;
   }
 
   function shouldCapturePromptContent(cwd: string): boolean {
-    return loadConfigForCwd(cwd)?.capturePromptContent === true;
+    // Swallow malformed-JSON / unexpected errors so a broken config in one
+    // project doesn't 500 the hooks endpoint for every subsequent event.
+    // `loadConfigForCwd` still throws (tests verify retry-on-parse-error); the
+    // re-throw is intentional for direct callers that want to surface it.
+    try {
+      return loadConfigForCwd(cwd)?.capturePromptContent === true;
+    } catch {
+      return false;
+    }
   }
 
   function resetCache(): void {
@@ -74,4 +83,18 @@ function isEnoent(err: unknown): boolean {
     "code" in err &&
     (err as { code?: unknown }).code === "ENOENT"
   );
+}
+
+/**
+ * `cwd` comes from the hook payload (HTTP body), so we treat it as untrusted
+ * and refuse anything that isn't an absolute, normalized path. Relative paths
+ * (which would resolve against the server's cwd) and paths that still contain
+ * `..` after normalization are rejected.
+ */
+function safeResolveCwd(cwd: string): string | null {
+  if (!cwd || typeof cwd !== "string") return null;
+  if (!isAbsolute(cwd)) return null;
+  const normalized = normalize(cwd);
+  if (normalized.split(sep).includes("..")) return null;
+  return normalized;
 }

@@ -101,4 +101,38 @@ describe("configLoader", () => {
     expect(loader.loadConfigForCwd("")).toBeNull();
     expect(readFile).not.toHaveBeenCalled();
   });
+
+  it("shouldCapturePromptContent swallows malformed-JSON errors (returns false)", () => {
+    const readFile = vi.fn(() => "{not json");
+    const loader = createConfigLoader(store, { readFile });
+    expect(loader.shouldCapturePromptContent("/tmp/broken")).toBe(false);
+  });
+
+  it("rejects relative cwd (refuses to resolve against server cwd)", () => {
+    const readFile = vi.fn(() => "{}");
+    const loader = createConfigLoader(store, { readFile });
+    expect(loader.loadConfigForCwd("relative/path")).toBeNull();
+    expect(loader.loadConfigForCwd("./local")).toBeNull();
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it("rejects cwd containing path-traversal segments", () => {
+    const readFile = vi.fn(() => "{}");
+    const loader = createConfigLoader(store, { readFile });
+    // `path.normalize` collapses interior `..`, but a path that begins with
+    // `..` (relative) or ends up with `..` still left after normalization must
+    // be rejected.
+    expect(loader.loadConfigForCwd("../../../etc")).toBeNull();
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it("normalizes absolute cwd before caching + upserting (reads disk only once for equivalent paths)", () => {
+    const readFile = vi.fn(() => JSON.stringify({ project: "p" }));
+    const loader = createConfigLoader(store, { readFile });
+    loader.loadConfigForCwd("/opt/proj");
+    loader.loadConfigForCwd("/opt/./proj");
+    loader.loadConfigForCwd("/opt/foo/../proj");
+    expect(readFile).toHaveBeenCalledTimes(1);
+    expect(store.getProjectConfig("/opt/proj")).not.toBeNull();
+  });
 });
