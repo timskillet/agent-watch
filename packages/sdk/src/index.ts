@@ -56,5 +56,9 @@ export type {
   Transport,
   RunDetail,
   RunComparison,
+  RunComparisonResult,
+  RunSummaryForCompare,
+  AgentRollup,
+  TraceRollup,
   PanelResult,
 } from "@agentwatch/types";
