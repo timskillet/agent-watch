@@ -15,9 +15,9 @@ import type {
   RunSortDir,
   RunSortKey,
   RunStatus,
+  TimeRange,
 } from "@agentwatch/types";
 import { getRunDetail, getRunDurationTrends, getRuns } from "../../api/client";
-import { hashToColor } from "../../charts/theme";
 import { Sparkline } from "../../charts/Sparkline";
 import { useSelection } from "../../context/SelectionContext";
 import type { WidgetProps } from "../../widgets/types";
@@ -28,6 +28,14 @@ import { EmptyState } from "../ui/EmptyState";
 import { Select } from "../ui/Select";
 import { Skeleton } from "../ui/Skeleton";
 import { TextInput } from "../ui/TextInput";
+import { TimeRangePicker } from "../ui/TimeRangePicker";
+import { ToolCallDrawer } from "./run-detail/ToolCallDrawer";
+import { ToolCallList } from "./run-detail/ToolCallList";
+import {
+  DEFAULT_TIME_RANGE,
+  migrateTimeRange,
+  resolveTimeRange,
+} from "../../lib/timeRange";
 import styles from "./RunsTableWidget.module.css";
 
 // ---------------------------------------------------------------------------
@@ -63,8 +71,7 @@ interface FilterConfig {
   search: string;
   statuses: RunStatus[];
   sources: IngestionSource[];
-  since?: number;
-  until?: number;
+  range: TimeRange;
 }
 
 interface RunsTableConfig {
@@ -88,14 +95,16 @@ const DEFAULT_CONFIG: RunsTableConfig = {
     trend: true,
     source: true,
   },
-  filters: { search: "", statuses: [], sources: [] },
+  filters: { search: "", statuses: [], sources: [], range: DEFAULT_TIME_RANGE },
   costThreshold: 0.5,
 };
 
 function readConfig(raw: Record<string, unknown>): RunsTableConfig {
   // Defensive: configs persisted from older versions may be missing fields.
   // Merge against DEFAULT_CONFIG without blowing up on shape mismatches.
-  const r = raw as Partial<RunsTableConfig>;
+  const r = raw as Partial<RunsTableConfig> & {
+    filters?: Partial<FilterConfig> & { since?: number; until?: number };
+  };
   return {
     pageSize:
       typeof r.pageSize === "number" && PAGE_SIZES.includes(r.pageSize as 25)
@@ -116,8 +125,14 @@ function readConfig(raw: Record<string, unknown>): RunsTableConfig {
       search: r.filters?.search ?? "",
       statuses: Array.isArray(r.filters?.statuses) ? r.filters.statuses : [],
       sources: Array.isArray(r.filters?.sources) ? r.filters.sources : [],
-      since: r.filters?.since,
-      until: r.filters?.until,
+      range: migrateTimeRange(
+        r.filters?.range ??
+          // Legacy: reconstruct from since/until if present (both required)
+          (typeof r.filters?.since === "number" &&
+          typeof r.filters?.until === "number"
+            ? { since: r.filters.since, until: r.filters.until }
+            : undefined),
+      ),
     },
     costThreshold:
       typeof r.costThreshold === "number"
@@ -148,6 +163,13 @@ export function RunsTableWidget({
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [details, setDetails] = useState<Map<string, RunDetail>>(new Map());
+  const [toolSearchById, setToolSearchById] = useState<Record<string, string>>(
+    {},
+  );
+  const [selectedTool, setSelectedTool] = useState<{
+    runId: string;
+    event: AgentWatchEvent;
+  } | null>(null);
 
   // Debounce search input → persist to config after 250ms idle.
   useEffect(() => {
@@ -172,6 +194,7 @@ export function RunsTableWidget({
   useEffect(() => {
     let ignore = false;
     setLoading(true);
+    const { since, until } = resolveTimeRange(cfg.filters.range);
     const fetchPromise = getRuns({
       pipelineDefinitionId: undefined,
       status:
@@ -179,8 +202,8 @@ export function RunsTableWidget({
       ingestionSource:
         cfg.filters.sources.length > 0 ? cfg.filters.sources : undefined,
       search: cfg.filters.search || undefined,
-      since: cfg.filters.since,
-      until: cfg.filters.until,
+      since,
+      until,
       sortBy: cfg.sort.key,
       sortDir: cfg.sort.dir,
       limit: cfg.pageSize,
@@ -220,8 +243,7 @@ export function RunsTableWidget({
     cfg.filters.search,
     cfg.filters.statuses,
     cfg.filters.sources,
-    cfg.filters.since,
-    cfg.filters.until,
+    cfg.filters.range,
     cfg.sort.key,
     cfg.sort.dir,
   ]);
@@ -286,25 +308,20 @@ export function RunsTableWidget({
     [cfg.filters, config, onConfigChange],
   );
 
-  const setDateRange = useCallback(
-    (which: "since" | "until", iso: string) => {
-      const ts = iso ? new Date(iso).getTime() : undefined;
-      onConfigChange({
-        ...config,
-        filters: { ...cfg.filters, [which]: ts },
+  const toggleExpand = useCallback(
+    (pipelineId: string) => {
+      if (selectedTool?.runId === pipelineId) {
+        setSelectedTool(null);
+      }
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(pipelineId)) next.delete(pipelineId);
+        else next.add(pipelineId);
+        return next;
       });
     },
-    [cfg.filters, config, onConfigChange],
+    [selectedTool],
   );
-
-  const toggleExpand = useCallback((pipelineId: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(pipelineId)) next.delete(pipelineId);
-      else next.add(pipelineId);
-      return next;
-    });
-  }, []);
 
   const visibleColumns = useMemo(
     () => ALL_COLUMNS.filter((c) => cfg.columnVisibility[c.key]),
@@ -421,19 +438,16 @@ export function RunsTableWidget({
           ))}
         </div>
         <div className={styles.filterRow}>
-          <span className={styles.filterLabel}>From:</span>
-          <input
-            type="datetime-local"
-            className={styles.dateInput}
-            value={tsToInputValue(cfg.filters.since)}
-            onChange={(e) => setDateRange("since", e.target.value)}
-          />
-          <span className={styles.filterLabel}>To:</span>
-          <input
-            type="datetime-local"
-            className={styles.dateInput}
-            value={tsToInputValue(cfg.filters.until)}
-            onChange={(e) => setDateRange("until", e.target.value)}
+          <span className={styles.filterLabel}>Range:</span>
+          <TimeRangePicker
+            value={cfg.filters.range}
+            onChange={(range) =>
+              onConfigChange({
+                ...config,
+                filters: { ...cfg.filters, range },
+              })
+            }
+            size="sm"
           />
         </div>
       </div>
@@ -511,7 +525,28 @@ export function RunsTableWidget({
                     {expanded && (
                       <tr className={styles.expandedRow}>
                         <td colSpan={colSpan}>
-                          <ExpandedDetail run={run} detail={detail} />
+                          <ExpandedDetail
+                            run={run}
+                            detail={detail}
+                            search={toolSearchById[run.pipelineId] ?? ""}
+                            onSearchChange={(s) =>
+                              setToolSearchById((prev) => ({
+                                ...prev,
+                                [run.pipelineId]: s,
+                              }))
+                            }
+                            onSelectTool={(event) =>
+                              setSelectedTool({
+                                runId: run.pipelineId,
+                                event,
+                              })
+                            }
+                            selectedToolId={
+                              selectedTool?.runId === run.pipelineId
+                                ? selectedTool.event.id
+                                : undefined
+                            }
+                          />
                         </td>
                       </tr>
                     )}
@@ -560,6 +595,18 @@ export function RunsTableWidget({
           Next
         </Button>
       </div>
+
+      {selectedTool != null &&
+        (() => {
+          const d = details.get(selectedTool.runId);
+          return (
+            <ToolCallDrawer
+              events={d?.events ?? []}
+              selectedEvent={selectedTool.event}
+              onClose={() => setSelectedTool(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
@@ -660,17 +707,39 @@ function StatusDot({ status }: { status: RunStatus }) {
 function ExpandedDetail({
   run,
   detail,
+  search,
+  onSearchChange,
+  onSelectTool,
+  selectedToolId,
 }: {
   run: PipelineRunSummary;
   detail: RunDetail | undefined;
+  search: string;
+  onSearchChange: (s: string) => void;
+  onSelectTool: (e: AgentWatchEvent) => void;
+  selectedToolId?: string;
 }) {
   return (
     <div className={styles.expandedPanel}>
-      <div className={styles.expandedWaterfall}>
+      <div className={styles.expandedTools}>
+        <div className={styles.expandedSearch}>
+          <TextInput
+            leadingIcon="🔍"
+            placeholder="Search tool calls…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            size="sm"
+          />
+        </div>
         {detail ? (
-          <MiniWaterfall events={detail.events} />
+          <ToolCallList
+            events={detail.events}
+            search={search}
+            onSelect={onSelectTool}
+            selectedId={selectedToolId}
+          />
         ) : (
-          <Skeleton variant="block" height={48} />
+          <Skeleton variant="block" height={96} />
         )}
       </div>
       <dl className={styles.expandedMetrics}>
@@ -687,75 +756,6 @@ function ExpandedDetail({
         <dt>Pipeline ID</dt>
         <dd className={styles.mono}>{run.pipelineId}</dd>
       </dl>
-    </div>
-  );
-}
-
-interface Bar {
-  toolName: string;
-  startPct: number;
-  widthPct: number;
-  color: string;
-  isError: boolean;
-}
-
-function MiniWaterfall({ events }: { events: AgentWatchEvent[] }) {
-  const bars = useMemo<Bar[]>(() => {
-    const tool = events.filter(
-      (e) =>
-        e.type === "tool_call" ||
-        e.type === "tool_result" ||
-        e.type === "tool_error",
-    );
-    if (tool.length === 0) return [];
-    const min = Math.min(...tool.map((e) => e.timestamp));
-    const max = Math.max(...tool.map((e) => e.timestamp + (e.durationMs ?? 0)));
-    const span = Math.max(1, max - min);
-    // Pair tool_call → tool_result/tool_error via gen_ai.tool.call.id when available.
-    type ToolPayload = {
-      "gen_ai.tool.name"?: string;
-      "gen_ai.tool.call.id"?: string;
-    };
-    const calls = tool.filter((e) => e.type === "tool_call");
-    return calls.map((call) => {
-      const callPayload = call.payload as ToolPayload;
-      const callId = callPayload["gen_ai.tool.call.id"];
-      const partner = tool.find(
-        (e) =>
-          e !== call &&
-          (e.type === "tool_result" || e.type === "tool_error") &&
-          (e.payload as ToolPayload)["gen_ai.tool.call.id"] === callId,
-      );
-      const start = call.timestamp;
-      const end = partner?.timestamp ?? start + (call.durationMs ?? 0);
-      const toolName = callPayload["gen_ai.tool.name"] ?? "tool";
-      return {
-        toolName,
-        startPct: ((start - min) / span) * 100,
-        widthPct: Math.max(0.5, ((end - start) / span) * 100),
-        color: hashToColor(toolName),
-        isError: partner?.type === "tool_error",
-      };
-    });
-  }, [events]);
-
-  if (bars.length === 0) {
-    return <span className={styles.muted}>No tool events</span>;
-  }
-  return (
-    <div className={styles.miniWaterfall}>
-      {bars.map((b, i) => (
-        <span
-          key={i}
-          className={`${styles.miniBar} ${b.isError ? styles.miniBarError : ""}`}
-          style={{
-            left: `${b.startPct}%`,
-            width: `${b.widthPct}%`,
-            background: b.isError ? "var(--color-error)" : b.color,
-          }}
-          title={b.toolName}
-        />
-      ))}
     </div>
   );
 }
@@ -780,14 +780,4 @@ function formatRelative(ts: number): string {
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
   return new Date(ts).toLocaleDateString();
-}
-
-// datetime-local expects `YYYY-MM-DDTHH:mm` in local time, no timezone.
-function tsToInputValue(ts: number | undefined): string {
-  if (ts == null) return "";
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-    d.getDate(),
-  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

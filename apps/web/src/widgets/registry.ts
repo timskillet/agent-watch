@@ -78,7 +78,12 @@ const defaultConfigs: Record<WidgetType, Record<string, unknown>> = {
       trend: true,
       source: true,
     },
-    filters: { search: "", statuses: [], sources: [] },
+    filters: {
+      search: "",
+      statuses: [],
+      sources: [],
+      range: { kind: "preset", value: "24h" },
+    },
     costThreshold: 0.5,
   },
   "session-waterfall": {},
