@@ -4,6 +4,13 @@ export interface AgentWatchConfig {
   alerts?: AlertRule[];
   annotate?: AnnotationRule[];
   panels?: PanelDefinition[];
+  /**
+   * Off by default. When `true`, the server retains the raw user-prompt text
+   * on `user_prompt` events (capped at 8192 chars) so the dashboard can show
+   * it as the trace headline. Loaded from `agentwatch.config.json` in the
+   * session's cwd.
+   */
+  capturePromptContent?: boolean;
 }
 
 export interface AlertRule {

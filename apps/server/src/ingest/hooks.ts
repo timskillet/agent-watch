@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { SQLiteEventStore } from "../store.js";
+import type { ConfigLoader } from "../config/configLoader.js";
 import {
   normalizeHookPayload,
   type ClaudeCodeHookPayload,
@@ -8,6 +9,7 @@ import {
 export function registerHooksRoute(
   app: FastifyInstance,
   store: SQLiteEventStore,
+  configLoader?: ConfigLoader,
 ): void {
   app.post<{ Body: ClaudeCodeHookPayload }>("/hooks", async (req, reply) => {
     const body = req.body;
@@ -16,7 +18,9 @@ export function registerHooksRoute(
       return reply.status(400).send({ error: "Missing session_id" });
     }
 
-    const event = normalizeHookPayload(body);
+    const event = normalizeHookPayload(body, {
+      shouldCapturePromptContent: configLoader?.shouldCapturePromptContent,
+    });
 
     if (event) {
       store.insert([event]);

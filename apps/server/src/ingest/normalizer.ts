@@ -45,6 +45,13 @@ function evictPreToolEntries(sessionId: string): void {
 // a malformed timestamp on one side of a Pre/Post pair). 1 hour = 3.6e6 ms.
 const MAX_TOOL_DURATION_MS = 3_600_000;
 
+const MAX_PROMPT_CHARS = 8192;
+
+export interface NormalizeOptions {
+  /** Returns true when the project's config opts in to prompt-content capture. */
+  shouldCapturePromptContent?: (cwd: string) => boolean;
+}
+
 function sanityCheckDuration(
   durationMs: number,
   toolUseId: string | undefined,
@@ -78,6 +85,7 @@ function base(
 
 export function normalizeHookPayload(
   hook: ClaudeCodeHookPayload,
+  opts: NormalizeOptions = {},
 ): AgentWatchEvent | null {
   const eventName = hook.hook_event_name ?? hook.type;
   switch (eventName) {
@@ -205,11 +213,19 @@ export function normalizeHookPayload(
     }
 
     case "UserPromptSubmit": {
+      const rawPrompt = typeof hook.prompt === "string" ? hook.prompt : "";
+      const allowCapture =
+        rawPrompt.length > 0 &&
+        hook.cwd !== undefined &&
+        opts.shouldCapturePromptContent?.(hook.cwd) === true;
       return {
         ...base(hook),
         type: "user_prompt",
         payload: {
-          promptLength: hook.prompt?.length ?? 0,
+          promptLength: rawPrompt.length,
+          ...(allowCapture
+            ? { promptText: rawPrompt.slice(0, MAX_PROMPT_CHARS) }
+            : {}),
         },
       } as AgentWatchEvent;
     }

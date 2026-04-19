@@ -15,6 +15,7 @@ import type {
   PanelResult,
   EventStore,
 } from "@agentwatch/types";
+import { buildTraces } from "./trace/buildTraces.js";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS events (
@@ -616,6 +617,7 @@ export class SQLiteEventStore implements EventStore {
       durationMs: endTime - startTime,
       agents,
       events,
+      traces: buildTraces(events),
     };
   }
 
@@ -1068,6 +1070,31 @@ export class SQLiteEventStore implements EventStore {
     }
 
     return { rows: [] };
+  }
+
+  upsertProjectConfig(cwd: string, configJson: string, loadedAt: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO project_configs (cwd, config_json, loaded_at)
+         VALUES (@cwd, @configJson, @loadedAt)
+         ON CONFLICT(cwd) DO UPDATE SET
+           config_json = excluded.config_json,
+           loaded_at   = excluded.loaded_at`,
+      )
+      .run({ cwd, configJson, loadedAt });
+  }
+
+  getProjectConfig(
+    cwd: string,
+  ): { cwd: string; configJson: string; loadedAt: number } | null {
+    const row = this.db
+      .prepare(
+        "SELECT cwd, config_json AS configJson, loaded_at AS loadedAt FROM project_configs WHERE cwd = @cwd",
+      )
+      .get({ cwd }) as
+      | { cwd: string; configJson: string; loadedAt: number }
+      | undefined;
+    return row ?? null;
   }
 
   close(): void {
