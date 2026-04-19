@@ -1,0 +1,151 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+.trigger:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.trigger:active {
+  background: var(--color-bg-elevated);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.triggerSm {
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+}
+
+.triggerMd {
+  padding: 6px 14px;
+  font-size: var(--text-sm);
+}
+
+.chevron {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+
+/* Popover body layout */
+.body {
+  display: flex;
+  gap: 0;
+  min-width: 420px;
+}
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-right: 1px solid var(--color-border);
+  min-width: 160px;
+}
+
+.presetBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.presetBtn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.presetBtnActive {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-hover);
+}
+
+.presetBtnActive:hover {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-hover);
+}
+
+/* Custom range section */
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  flex: 1;
+}
+
+.customLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.dateInput {
+  width: 100%;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: 4px 8px;
+  height: 28px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  color-scheme: dark;
+}
+
+.dateInput:hover {
+  border-color: var(--color-border-focus);
+}
+
+.dateInput:focus-visible {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+.errorText {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}
+
+.applyRow {
+  display: flex;
+  justify-content: flex-end;
+}
