@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   AgentWatchEvent,
   IngestionSource,
@@ -154,6 +155,10 @@ export function RunsTableWidget({
 }: WidgetProps) {
   const cfg = useMemo(() => readConfig(config), [config]);
   const { selectedSessionId, setSelectedSessionId } = useSelection();
+  const navigate = useNavigate();
+  // Compare-pair selection is transient UI state, not persisted — see
+  // `comparePair.length === 2 → navigate("/compare?…")`. Cleared on nav.
+  const [comparePair, setComparePair] = useState<string[]>([]);
 
   // Local UI state — debounced search input lives here so typing doesn't write
   // to localStorage on every keystroke.
@@ -343,7 +348,26 @@ export function RunsTableWidget({
   );
 
   const totalPages = Math.max(1, Math.ceil(total / cfg.pageSize));
-  const colSpan = visibleColumns.length + 1; // +1 for chevron
+  const colSpan = visibleColumns.length + 2; // +1 chevron, +1 compare checkbox
+
+  const toggleCompare = useCallback((pipelineId: string) => {
+    setComparePair((prev) => {
+      if (prev.includes(pipelineId)) {
+        return prev.filter((id) => id !== pipelineId);
+      }
+      // Keep at most the two most-recent selections.
+      return [...prev, pipelineId].slice(-2);
+    });
+  }, []);
+
+  const clearCompare = useCallback(() => setComparePair([]), []);
+
+  const openCompare = useCallback(() => {
+    if (comparePair.length !== 2) return;
+    const [a, b] = comparePair;
+    navigate(`/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+    setComparePair([]);
+  }, [comparePair, navigate]);
 
   // Configuration panel (gear) — preferences only; live filters are in the main bar.
   if (isConfigOpen) {
@@ -468,6 +492,10 @@ export function RunsTableWidget({
             <thead>
               <tr>
                 <th className={styles.chevronCol} />
+                <th
+                  className={styles.compareCol}
+                  aria-label="Select for comparison"
+                />
                 {visibleColumns.map((c) => {
                   const sortable = c.sortKey != null;
                   const isActive = sortable && cfg.sort.key === c.sortKey;
@@ -514,6 +542,17 @@ export function RunsTableWidget({
                         >
                           ▶
                         </button>
+                      </td>
+                      <td
+                        className={styles.compareCol}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          id={`cmp-${run.pipelineId}`}
+                          checked={comparePair.includes(run.pipelineId)}
+                          onChange={() => toggleCompare(run.pipelineId)}
+                          aria-label={`Compare run ${run.pipelineId}`}
+                        />
                       </td>
                       {visibleColumns.map((c) => (
                         <td key={c.key}>
@@ -562,6 +601,37 @@ export function RunsTableWidget({
           </table>
         )}
       </div>
+
+      {comparePair.length > 0 && (
+        <div className={styles.compareBar} role="status" aria-live="polite">
+          {comparePair.length === 1 ? (
+            <span>Select one more run to compare.</span>
+          ) : (
+            <span>
+              Compare{" "}
+              <code className={styles.compareId}>
+                {runLabel(runs, comparePair[0])}
+              </code>{" "}
+              vs{" "}
+              <code className={styles.compareId}>
+                {runLabel(runs, comparePair[1])}
+              </code>
+            </span>
+          )}
+          <span className={styles.paginationGap} />
+          <Button size="sm" variant="ghost" onClick={clearCompare}>
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={comparePair.length !== 2}
+            onClick={openCompare}
+          >
+            Compare
+          </Button>
+        </div>
+      )}
 
       {/* Pagination footer */}
       <div className={styles.pagination}>
@@ -782,6 +852,15 @@ function ExpandedDetail({
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
+
+function runLabel(runs: PipelineRunSummary[], pipelineId: string): string {
+  const run = runs.find((r) => r.pipelineId === pipelineId);
+  const id = run?.pipelineId ?? pipelineId;
+  const short = id.length > 8 ? `${id.slice(0, 8)}…` : id;
+  return run?.pipelineDefinitionId
+    ? `${run.pipelineDefinitionId}/${short}`
+    : short;
+}
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
