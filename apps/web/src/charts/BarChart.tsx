@@ -30,6 +30,9 @@ interface BarChartProps<T extends Record<string, unknown>> {
   colorBy?: ColorBy;
   height?: number;
   valueFormatter?: (value: number) => string;
+  onBarClick?: (row: T) => void;
+  /** Optional second bar key for compare-to-previous overlays. */
+  prevDataKey?: string;
 }
 
 export function BarChart<T extends Record<string, unknown>>({
@@ -40,6 +43,8 @@ export function BarChart<T extends Record<string, unknown>>({
   colorBy = "series",
   height = 240,
   valueFormatter,
+  onBarClick,
+  prevDataKey,
 }: BarChartProps<T>) {
   const seriesColor = getSeriesColor(0);
   const isVerticalLayout = layout === "vertical";
@@ -105,12 +110,27 @@ export function BarChart<T extends Record<string, unknown>>({
           fill={seriesColor}
           isAnimationActive={false}
           radius={3}
+          onClick={
+            onBarClick
+              ? (payload: unknown) => onBarClick(payload as T)
+              : undefined
+          }
+          style={onBarClick ? { cursor: "pointer" } : undefined}
         >
           {colorBy === "category" &&
             data.map((row, i) => (
               <Cell key={i} fill={hashToColor(String(row[categoryKey] ?? i))} />
             ))}
         </Bar>
+        {prevDataKey != null && (
+          <Bar
+            dataKey={prevDataKey}
+            fill={seriesColor}
+            fillOpacity={0.25}
+            isAnimationActive={false}
+            radius={3}
+          />
+        )}
       </RechartsBarChart>
     </ResponsiveContainer>
   );

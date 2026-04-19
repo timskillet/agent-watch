@@ -88,7 +88,12 @@ const defaultConfigs: Record<WidgetType, Record<string, unknown>> = {
   },
   "session-waterfall": {},
   "cost-trend": { range: "7d" },
-  "tool-breakdown": { range: "7d", metric: "tool.count" },
+  "tool-breakdown": {
+    range: { kind: "preset", value: "7d" },
+    metric: "tool.count",
+    groupBy: "tool_name",
+    compareToPrevious: false,
+  },
   "stats-summary": {},
 };
 
