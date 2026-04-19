@@ -452,6 +452,31 @@ describe("EventStore query methods", () => {
       expect(detail.traces[0].events).toHaveLength(4);
     });
 
+    it("memoises traces across repeat getRunDetail calls until new events arrive", () => {
+      const t1 = store.getRunDetail("run-1")!.traces;
+      const t2 = store.getRunDetail("run-1")!.traces;
+      expect(t2).toBe(t1);
+
+      store.insert([
+        makeEvent({
+          id: "evt-s1-05",
+          sessionId: "sess-A",
+          pipelineId: "run-1",
+          pipelineDefinitionId: "my-app",
+          projectId: "proj-1",
+          agentId: "agent-main",
+          type: "tool_call",
+          level: "info",
+          timestamp: 1700000004000,
+          sequence: 5,
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+      ]);
+      const t3 = store.getRunDetail("run-1")!.traces;
+      expect(t3).not.toBe(t1);
+      expect(t3[0].events).toHaveLength(5);
+    });
+
     it("populates traces for OTel-only runs (one-trace-per-session fallback)", () => {
       const detail = store.getRunDetail("run-2")!;
       expect(detail.traces).toHaveLength(1);

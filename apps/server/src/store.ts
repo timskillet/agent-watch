@@ -120,6 +120,17 @@ function rowToEvent(row: EventRow): AgentWatchEvent {
 export class SQLiteEventStore implements EventStore {
   private db: Database.Database;
   private insertStmt: Database.Statement;
+  /**
+   * Memoises `buildTraces` output by (pipelineId, eventCount). Events are
+   * append-only per pipeline, so an unchanged event count implies unchanged
+   * trace derivation. Invalidated by `insert()` to keep cache coherence
+   * simple — we drop by pipelineId whenever any new event for that pipeline
+   * is written.
+   */
+  private tracesCache = new Map<
+    string,
+    { eventCount: number; traces: ReturnType<typeof buildTraces> }
+  >();
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -137,6 +148,12 @@ export class SQLiteEventStore implements EventStore {
   }
 
   insert(events: AgentWatchEvent[]): void {
+    // Invalidate traces cache for every affected pipeline.
+    for (const evt of events) {
+      if (evt.pipelineId !== undefined) {
+        this.tracesCache.delete(evt.pipelineId);
+      }
+    }
     const run = this.db.transaction((evts: AgentWatchEvent[]) => {
       for (const evt of evts) {
         const meta = evt.meta ? JSON.stringify(evt.meta) : null;
@@ -607,6 +624,18 @@ export class SQLiteEventStore implements EventStore {
     const hasError = rows.some((r) => r.level === "error");
     const hasEnd = rows.some((r) => r.type === "session_end");
 
+    const hit = this.tracesCache.get(pipelineId);
+    let traces: ReturnType<typeof buildTraces>;
+    if (hit !== undefined && hit.eventCount === events.length) {
+      traces = hit.traces;
+    } else {
+      traces = buildTraces(events);
+      this.tracesCache.set(pipelineId, {
+        eventCount: events.length,
+        traces,
+      });
+    }
+
     return {
       pipelineId,
       pipelineDefinitionId: rows[0].pipeline_definition_id ?? undefined,
@@ -617,7 +646,7 @@ export class SQLiteEventStore implements EventStore {
       durationMs: endTime - startTime,
       agents,
       events,
-      traces: buildTraces(events),
+      traces,
     };
   }
 
