@@ -6,7 +6,7 @@ import type {
   AgentWatchEvent,
   RunListResult,
   RunDetail,
-  RunComparison,
+  RunComparisonResult,
   RunDurationTrends,
   ProjectSummary,
   PanelQuery,
@@ -93,7 +93,7 @@ export function getRunDetail(pipelineId: string): Promise<RunDetail | null> {
 export function compareRuns(
   a: string,
   b: string,
-): Promise<RunComparison | null> {
+): Promise<RunComparisonResult | null> {
   return fetchJson(`/api/runs/compare${buildQuery({ a, b })}`, null);
 }
 
