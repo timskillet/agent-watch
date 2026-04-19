@@ -443,6 +443,111 @@ describe("EventStore query methods", () => {
       const detail = store.getRunDetail("run-1")!;
       expect(detail.durationMs).toBe(3000);
     });
+
+    it("populates traces (CC fallback: single preamble trace when no user_prompt events)", () => {
+      const detail = store.getRunDetail("run-1")!;
+      expect(detail.traces).toHaveLength(1);
+      expect(detail.traces[0].index).toBe(0);
+      expect(detail.traces[0].traceId).toBe("sess-A:0");
+      expect(detail.traces[0].events).toHaveLength(4);
+    });
+
+    it("memoises traces across repeat getRunDetail calls until new events arrive", () => {
+      const t1 = store.getRunDetail("run-1")!.traces;
+      const t2 = store.getRunDetail("run-1")!.traces;
+      expect(t2).toBe(t1);
+
+      store.insert([
+        makeEvent({
+          id: "evt-s1-05",
+          sessionId: "sess-A",
+          pipelineId: "run-1",
+          pipelineDefinitionId: "my-app",
+          projectId: "proj-1",
+          agentId: "agent-main",
+          type: "tool_call",
+          level: "info",
+          timestamp: 1700000004000,
+          sequence: 5,
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+      ]);
+      const t3 = store.getRunDetail("run-1")!.traces;
+      expect(t3).not.toBe(t1);
+      expect(t3[0].events).toHaveLength(5);
+    });
+
+    it("populates traces for OTel-only runs (one-trace-per-session fallback)", () => {
+      const detail = store.getRunDetail("run-2")!;
+      expect(detail.traces).toHaveLength(1);
+      expect(detail.traces[0].traceId).toBe("sess-B:0");
+      expect(detail.traces[0].errorCount).toBe(1);
+    });
+
+    it("derives multiple traces for CC sessions with user_prompt events", () => {
+      store.insert([
+        makeEvent({
+          id: "evt-mp-01",
+          sessionId: "sess-mp",
+          pipelineId: "run-mp",
+          agentId: "a",
+          type: "session_start",
+          timestamp: 1_800_000_000_000,
+          sequence: 1,
+          payload: { cwd: "/w" },
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+        makeEvent({
+          id: "evt-mp-02",
+          sessionId: "sess-mp",
+          pipelineId: "run-mp",
+          agentId: "a",
+          type: "user_prompt",
+          timestamp: 1_800_000_001_000,
+          sequence: 2,
+          payload: { promptLength: 10 },
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+        makeEvent({
+          id: "evt-mp-03",
+          sessionId: "sess-mp",
+          pipelineId: "run-mp",
+          agentId: "a",
+          type: "tool_call",
+          timestamp: 1_800_000_002_000,
+          sequence: 3,
+          payload: { "gen_ai.tool.name": "Bash", input: { command: "ls" } },
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+        makeEvent({
+          id: "evt-mp-04",
+          sessionId: "sess-mp",
+          pipelineId: "run-mp",
+          agentId: "a",
+          type: "user_prompt",
+          timestamp: 1_800_000_003_000,
+          sequence: 4,
+          payload: { promptLength: 20 },
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+        makeEvent({
+          id: "evt-mp-05",
+          sessionId: "sess-mp",
+          pipelineId: "run-mp",
+          agentId: "a",
+          type: "tool_call",
+          timestamp: 1_800_000_004_000,
+          sequence: 5,
+          payload: { "gen_ai.tool.name": "Read", input: { file_path: "/x" } },
+          meta: { ingestion_source: "claude_code_hook" },
+        }),
+      ]);
+      const detail = store.getRunDetail("run-mp")!;
+      expect(detail.traces).toHaveLength(2);
+      expect(detail.traces.map((t) => t.index)).toEqual([1, 2]);
+      expect(detail.traces[0].toolCounts).toEqual({ Bash: 1 });
+      expect(detail.traces[1].toolCounts).toEqual({ Read: 1 });
+    });
   });
 
   // --- compareRuns ---

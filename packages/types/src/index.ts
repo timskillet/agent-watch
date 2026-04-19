@@ -106,7 +106,11 @@ export interface SessionEndPayload {
 
 export interface UserPromptPayload {
   promptLength: number;
-  // Never store actual prompt content
+  /**
+   * Present only when the project opts in via `capturePromptContent: true` in
+   * `agentwatch.config.json`. Server-capped to 8192 chars at ingestion.
+   */
+  promptText?: string;
 }
 
 export interface ToolErrorPayload {
@@ -301,6 +305,47 @@ export interface ProjectSummary {
 // EventStore query/result types
 // ---------------------------------------------------------------------------
 
+/**
+ * One user prompt and everything it caused. For CC: walk events by sequence,
+ * each `user_prompt` opens a new trace; events before the first prompt form
+ * a synthetic preamble (index 0). For OTel: one trace per `otel_trace_id`,
+ * falling back to one-trace-per-session when absent.
+ */
+export interface Trace {
+  /** `{sessionId}:{index}` for CC; `otel_trace_id` for OTel. */
+  traceId: string;
+  sessionId: string;
+  /** 0 for preamble / OTel single-trace fallback; 1..N for CC prompt traces. */
+  index: number;
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+
+  promptLength: number;
+  /** Truncated to 240 chars. Only populated when `capturePromptContent` is on. */
+  promptPreview?: string;
+
+  toolCounts: Record<string, number>;
+  /** Distinct tool names in first-use order. */
+  tools: string[];
+
+  llmCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  /**
+   * CC: allocated from `session_end.totalCost` by event-count share (heuristic).
+   * OTel: undefined for v1.
+   */
+  cost?: number;
+
+  errorCount: number;
+  /** Flat count: consecutive same-tool calls with strictly-equal JSON inputs. */
+  retryCount: number;
+
+  /** Slice of `RunDetail.events` for this trace (same object references). */
+  events: AgentWatchEvent[];
+}
+
 export interface RunDetail {
   pipelineId: string;
   pipelineDefinitionId?: string;
@@ -312,6 +357,8 @@ export interface RunDetail {
   agents: string[];
   /** Eagerly loaded — suitable for short-lived runs. Use EventStore.getEvents() with a filter for large pipelines. */
   events: AgentWatchEvent[];
+  /** Prompt-bounded traces derived from `events`. Empty array if no events. */
+  traces: Trace[];
 }
 
 export interface RunComparison {

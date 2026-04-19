@@ -141,6 +141,54 @@ describe("normalizeHookPayload", () => {
     expect(JSON.stringify(event)).not.toContain("Hello, world!");
   });
 
+  it("6a. UserPromptSubmit includes promptText when config opts in", () => {
+    const hook: ClaudeCodeHookPayload = {
+      session_id: "sess-6a",
+      type: "UserPromptSubmit",
+      cwd: "/opt/project",
+      prompt: "Hello, world!",
+    };
+    const event = normalizeHookPayload(hook, {
+      shouldCapturePromptContent: (cwd) => cwd === "/opt/project",
+    });
+    expect(event).not.toBeNull();
+    expect(event!.payload).toEqual({
+      promptLength: 13,
+      promptText: "Hello, world!",
+    });
+  });
+
+  it("6b. UserPromptSubmit caps promptText at 8192 chars", () => {
+    const long = "x".repeat(10_000);
+    const hook: ClaudeCodeHookPayload = {
+      session_id: "sess-6b",
+      type: "UserPromptSubmit",
+      cwd: "/opt/project",
+      prompt: long,
+    };
+    const event = normalizeHookPayload(hook, {
+      shouldCapturePromptContent: () => true,
+    });
+    expect(event!.payload).toMatchObject({
+      promptLength: 10_000,
+      promptText: "x".repeat(8192),
+    });
+  });
+
+  it("6c. UserPromptSubmit omits promptText when predicate returns false", () => {
+    const hook: ClaudeCodeHookPayload = {
+      session_id: "sess-6c",
+      type: "UserPromptSubmit",
+      cwd: "/opt/project",
+      prompt: "secret",
+    };
+    const event = normalizeHookPayload(hook, {
+      shouldCapturePromptContent: () => false,
+    });
+    expect(event!.payload).toEqual({ promptLength: 6 });
+    expect(JSON.stringify(event)).not.toContain("secret");
+  });
+
   it("7. Stop maps to session_end", () => {
     const hook: ClaudeCodeHookPayload = {
       session_id: "sess-7",
