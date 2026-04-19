@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { hashToColor } from "../../../charts/theme";
 import { deriveToolCallLabel } from "../../../lib/deriveToolCallLabel";
+import { formatDuration } from "../../../lib/formatDuration";
 import { pairToolEvents } from "../../../lib/pairToolEvents";
 import { EmptyState } from "../../ui/EmptyState";
 import styles from "./ToolCallList.module.css";
@@ -15,15 +16,6 @@ export interface ToolCallListProps {
   selectedId?: string;
   /** When total rows exceed this count the list virtualises. Default: 50. */
   virtualiseAt?: number;
-}
-
-function formatDuration(ms?: number): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const m = Math.floor(ms / 60_000);
-  const s = Math.floor((ms % 60_000) / 1000);
-  return `${m}m ${s}s`;
 }
 
 interface RowProps {
