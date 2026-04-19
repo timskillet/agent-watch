@@ -3,6 +3,7 @@ import {
   BarChart as RechartsBarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,6 +34,8 @@ interface BarChartProps<T extends Record<string, unknown>> {
   onBarClick?: (row: T) => void;
   /** Optional second bar key for compare-to-previous overlays. */
   prevDataKey?: string;
+  /** Per-bar label; receives the full row so row-specific context survives. */
+  barLabelFormatter?: (row: T) => string;
 }
 
 export function BarChart<T extends Record<string, unknown>>({
@@ -45,6 +48,7 @@ export function BarChart<T extends Record<string, unknown>>({
   valueFormatter,
   onBarClick,
   prevDataKey,
+  barLabelFormatter,
 }: BarChartProps<T>) {
   const seriesColor = getSeriesColor(0);
   const isVerticalLayout = layout === "vertical";
@@ -111,9 +115,7 @@ export function BarChart<T extends Record<string, unknown>>({
           isAnimationActive={false}
           radius={3}
           onClick={
-            onBarClick
-              ? (payload: unknown) => onBarClick(payload as T)
-              : undefined
+            onBarClick ? (data: unknown) => onBarClick(data as T) : undefined
           }
           style={onBarClick ? { cursor: "pointer" } : undefined}
         >
@@ -121,6 +123,43 @@ export function BarChart<T extends Record<string, unknown>>({
             data.map((row, i) => (
               <Cell key={i} fill={hashToColor(String(row[categoryKey] ?? i))} />
             ))}
+          {barLabelFormatter != null && (
+            <LabelList
+              dataKey={valueKey}
+              position={isVerticalLayout ? "right" : "top"}
+              content={(props) => {
+                const p = props as {
+                  x?: number;
+                  y?: number;
+                  width?: number;
+                  height?: number;
+                  index?: number;
+                };
+                const x = p.x ?? 0;
+                const y = p.y ?? 0;
+                const width = p.width ?? 0;
+                const height = p.height ?? 0;
+                const index = p.index ?? -1;
+                const row = data[index];
+                if (row == null) return null;
+                const text = barLabelFormatter(row);
+                const cx = isVerticalLayout ? x + width + 6 : x + width / 2;
+                const cy = isVerticalLayout ? y + height / 2 : y - 6;
+                return (
+                  <text
+                    x={cx}
+                    y={cy}
+                    fill="var(--color-text-primary)"
+                    fontSize={11}
+                    dominantBaseline="central"
+                    textAnchor={isVerticalLayout ? "start" : "middle"}
+                  >
+                    {text}
+                  </text>
+                );
+              }}
+            />
+          )}
         </Bar>
         {prevDataKey != null && (
           <Bar

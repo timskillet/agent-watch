@@ -96,11 +96,18 @@ export function ToolDrilldownDrawer({
       since,
       until,
       limit: 500,
-    }).then((rows) => {
-      if (ignore) return;
-      setAllEvents(rows);
-      setFetchKey(currentKey);
-    });
+    })
+      .then((rows) => {
+        if (ignore) return;
+        setAllEvents(rows);
+        setFetchKey(currentKey);
+      })
+      .catch((err) => {
+        if (ignore) return;
+        console.warn("ToolDrilldown fetch failed", err);
+        setAllEvents([]);
+        setFetchKey(currentKey);
+      });
     return () => {
       ignore = true;
     };

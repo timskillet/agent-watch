@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PanelQuery } from "@agentwatch/types";
 import type { TimeRange } from "@agentwatch/types";
 import { getPanelData } from "../../api/client";
@@ -95,11 +95,6 @@ function formatterFor(metric: Metric): (v: number) => string {
   return (v) => v.toFixed(0);
 }
 
-function failureRateFormatter(row: ChartRow): (v: number) => string {
-  return (v) =>
-    `${(v * 100).toFixed(1)}% (${row.errors ?? 0} of ${row.calls ?? 0})`;
-}
-
 const PLACEHOLDER_GROUP: DrilldownGroup = { kind: "tool", toolName: "" };
 
 export function ToolBreakdownWidget({
@@ -107,7 +102,7 @@ export function ToolBreakdownWidget({
   onConfigChange,
   isConfigOpen,
 }: WidgetProps) {
-  const cfg = readConfig(config);
+  const cfg = useMemo(() => readConfig(config), [config]);
   const [loaded, setLoaded] = useState<{
     key: string;
     rows: ChartRow[];
@@ -143,35 +138,44 @@ export function ToolBreakdownWidget({
         })()
       : Promise.resolve(null);
 
-    Promise.all([fetchCurrent, fetchPrev]).then(([current, prev]) => {
-      if (ignore) return;
+    Promise.all([fetchCurrent, fetchPrev])
+      .then(([current, prev]) => {
+        if (ignore) return;
 
-      const prevMap = new Map<string, number>();
-      if (prev != null) {
-        for (const r of prev.rows) {
-          const k = keyForGroupBy(r, cfg.groupBy);
-          prevMap.set(k, Number(r.value) || 0);
-        }
-      }
-
-      const rows: ChartRow[] = current.rows.map((r) => {
-        const k = keyForGroupBy(r, cfg.groupBy);
-        const row: ChartRow = {
-          key: k,
-          value: Number(r.value) || 0,
-        };
+        const prevMap = new Map<string, number>();
         if (prev != null) {
-          row.prevValue = prevMap.get(k) ?? 0;
+          for (const r of prev.rows) {
+            const k = keyForGroupBy(r, cfg.groupBy);
+            prevMap.set(k, Number(r.value) || 0);
+          }
         }
-        if (cfg.metric === "tool.failure_rate" && cfg.groupBy === "tool_name") {
-          row.calls = Number(r.calls) || 0;
-          row.errors = Number(r.errors) || 0;
-        }
-        return row;
-      });
 
-      setLoaded({ key, rows });
-    });
+        const rows: ChartRow[] = current.rows.map((r) => {
+          const k = keyForGroupBy(r, cfg.groupBy);
+          const row: ChartRow = {
+            key: k,
+            value: Number(r.value) || 0,
+          };
+          if (prev != null) {
+            row.prevValue = prevMap.get(k) ?? 0;
+          }
+          if (
+            cfg.metric === "tool.failure_rate" &&
+            cfg.groupBy === "tool_name"
+          ) {
+            row.calls = Number(r.calls) || 0;
+            row.errors = Number(r.errors) || 0;
+          }
+          return row;
+        });
+
+        setLoaded({ key, rows });
+      })
+      .catch((err) => {
+        if (ignore) return;
+        console.warn("ToolBreakdown fetch failed", err);
+        setLoaded({ key, rows: [] });
+      });
 
     return () => {
       ignore = true;
@@ -255,12 +259,6 @@ export function ToolBreakdownWidget({
     setDrilldown(group);
   }
 
-  // When failure_rate + tool_name, each bar gets its own formatter;
-  // for other cases use the shared metric formatter.
-  const sharedFormatter = isFailureRateWithToolName
-    ? undefined
-    : formatterFor(cfg.metric);
-
   return (
     <>
       <BarChart
@@ -270,15 +268,12 @@ export function ToolBreakdownWidget({
         layout="vertical"
         colorBy="category"
         height={240}
-        valueFormatter={
+        valueFormatter={formatterFor(cfg.metric)}
+        barLabelFormatter={
           isFailureRateWithToolName
-            ? (v) => {
-                const row = rows.find((r) => r.value === v);
-                return row
-                  ? failureRateFormatter(row)(v)
-                  : `${(v * 100).toFixed(1)}%`;
-              }
-            : sharedFormatter
+            ? (row) =>
+                `${(row.value * 100).toFixed(1)}% (${row.errors ?? 0} of ${row.calls ?? 0})`
+            : undefined
         }
         onBarClick={handleBarClick}
         prevDataKey={cfg.compareToPrevious ? "prevValue" : undefined}
