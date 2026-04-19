@@ -310,17 +310,13 @@ export function RunsTableWidget({
 
   const toggleExpand = useCallback(
     (pipelineId: string) => {
+      if (selectedTool?.runId === pipelineId) {
+        setSelectedTool(null);
+      }
       setExpandedIds((prev) => {
         const next = new Set(prev);
-        if (next.has(pipelineId)) {
-          next.delete(pipelineId);
-          // Close the drawer when collapsing the row that owns it.
-          if (selectedTool?.runId === pipelineId) {
-            setSelectedTool(null);
-          }
-        } else {
-          next.add(pipelineId);
-        }
+        if (next.has(pipelineId)) next.delete(pipelineId);
+        else next.add(pipelineId);
         return next;
       });
     },

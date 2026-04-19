@@ -27,9 +27,8 @@ interface RowProps {
 }
 
 function Row({ call, durationMs, isError, onSelect, selectedId }: RowProps) {
-  const toolName = (call.payload as { "gen_ai.tool.name": string })[
-    "gen_ai.tool.name"
-  ];
+  const toolName =
+    (call.payload as { "gen_ai.tool.name"?: string })["gen_ai.tool.name"] ?? "";
   const derived = deriveToolCallLabel(call);
   const tagColor = isError ? "var(--color-error)" : hashToColor(toolName);
   const isSelected = call.id === selectedId;
@@ -72,9 +71,9 @@ export function ToolCallList({
     const trimmed = search.trim().toLowerCase();
     if (!trimmed) return pairs;
     return pairs.filter(({ call }) => {
-      const toolName = (call.payload as { "gen_ai.tool.name": string })[
-        "gen_ai.tool.name"
-      ];
+      const toolName =
+        (call.payload as { "gen_ai.tool.name"?: string })["gen_ai.tool.name"] ??
+        "";
       const derived = deriveToolCallLabel(call);
       const inputJson = JSON.stringify(
         (call.payload as { input?: unknown }).input ?? {},

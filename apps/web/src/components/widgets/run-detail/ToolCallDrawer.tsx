@@ -139,7 +139,7 @@ export function ToolCallDrawer({
     if (paired == null) return null;
     if (paired.type === "tool_result") {
       const output = (paired.payload as ResultPayload).output;
-      if (isEmpty(output)) return null;
+      if (isEmpty(output)) return { kind: "empty" as const };
       return { kind: "result" as const, text: JSON.stringify(output, null, 2) };
     }
     if (paired.type === "tool_error") {
@@ -205,8 +205,11 @@ export function ToolCallDrawer({
           </DrawerSection>
 
           <DrawerSection title="Output" defaultOpen>
-            {outputContent == null && paired == null && (
+            {paired == null && (
               <span className={styles.muted}>(no output yet)</span>
+            )}
+            {outputContent?.kind === "empty" && (
+              <span className={styles.muted}>(empty output)</span>
             )}
             {outputContent?.kind === "result" && (
               <TruncatedPre key={resetKey + "-out"} text={outputContent.text} />
