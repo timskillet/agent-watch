@@ -16,6 +16,7 @@ import type {
   RunSortKey,
   RunStatus,
   TimeRange,
+  Trace,
 } from "@agentwatch/types";
 import { getRunDetail, getRunDurationTrends, getRuns } from "../../api/client";
 import { Sparkline } from "../../charts/Sparkline";
@@ -30,7 +31,8 @@ import { Skeleton } from "../ui/Skeleton";
 import { TextInput } from "../ui/TextInput";
 import { TimeRangePicker } from "../ui/TimeRangePicker";
 import { ToolCallDrawer } from "./run-detail/ToolCallDrawer";
-import { ToolCallList } from "./run-detail/ToolCallList";
+import { TraceDrawer } from "./run-detail/TraceDrawer";
+import { TraceList } from "./run-detail/TraceList";
 import {
   DEFAULT_TIME_RANGE,
   migrateTimeRange,
@@ -163,9 +165,13 @@ export function RunsTableWidget({
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [details, setDetails] = useState<Map<string, RunDetail>>(new Map());
-  const [toolSearchById, setToolSearchById] = useState<Record<string, string>>(
-    {},
-  );
+  const [traceSearchById, setTraceSearchById] = useState<
+    Record<string, string>
+  >({});
+  const [selectedTrace, setSelectedTrace] = useState<{
+    runId: string;
+    trace: Trace;
+  } | null>(null);
   const [selectedTool, setSelectedTool] = useState<{
     runId: string;
     event: AgentWatchEvent;
@@ -310,9 +316,8 @@ export function RunsTableWidget({
 
   const toggleExpand = useCallback(
     (pipelineId: string) => {
-      if (selectedTool?.runId === pipelineId) {
-        setSelectedTool(null);
-      }
+      if (selectedTrace?.runId === pipelineId) setSelectedTrace(null);
+      if (selectedTool?.runId === pipelineId) setSelectedTool(null);
       setExpandedIds((prev) => {
         const next = new Set(prev);
         if (next.has(pipelineId)) next.delete(pipelineId);
@@ -320,7 +325,7 @@ export function RunsTableWidget({
         return next;
       });
     },
-    [selectedTool],
+    [selectedTool, selectedTrace],
   );
 
   const visibleColumns = useMemo(
@@ -528,22 +533,22 @@ export function RunsTableWidget({
                           <ExpandedDetail
                             run={run}
                             detail={detail}
-                            search={toolSearchById[run.pipelineId] ?? ""}
+                            search={traceSearchById[run.pipelineId] ?? ""}
                             onSearchChange={(s) =>
-                              setToolSearchById((prev) => ({
+                              setTraceSearchById((prev) => ({
                                 ...prev,
                                 [run.pipelineId]: s,
                               }))
                             }
-                            onSelectTool={(event) =>
-                              setSelectedTool({
+                            onSelectTrace={(trace) =>
+                              setSelectedTrace({
                                 runId: run.pipelineId,
-                                event,
+                                trace,
                               })
                             }
-                            selectedToolId={
-                              selectedTool?.runId === run.pipelineId
-                                ? selectedTool.event.id
+                            selectedTraceId={
+                              selectedTrace?.runId === run.pipelineId
+                                ? selectedTrace.trace.traceId
                                 : undefined
                             }
                           />
@@ -596,17 +601,31 @@ export function RunsTableWidget({
         </Button>
       </div>
 
-      {selectedTool != null &&
-        (() => {
-          const d = details.get(selectedTool.runId);
-          return (
-            <ToolCallDrawer
-              events={d?.events ?? []}
-              selectedEvent={selectedTool.event}
-              onClose={() => setSelectedTool(null)}
-            />
-          );
-        })()}
+      {selectedTrace != null && (
+        <TraceDrawer
+          trace={selectedTrace.trace}
+          onClose={() => {
+            setSelectedTrace(null);
+            setSelectedTool(null);
+          }}
+          onSelectTool={(event) =>
+            setSelectedTool({ runId: selectedTrace.runId, event })
+          }
+          selectedToolId={
+            selectedTool?.runId === selectedTrace.runId
+              ? selectedTool.event.id
+              : undefined
+          }
+        />
+      )}
+
+      {selectedTool != null && selectedTrace != null && (
+        <ToolCallDrawer
+          events={selectedTrace.trace.events}
+          selectedEvent={selectedTool.event}
+          onClose={() => setSelectedTool(null)}
+        />
+      )}
     </div>
   );
 }
@@ -709,15 +728,15 @@ function ExpandedDetail({
   detail,
   search,
   onSearchChange,
-  onSelectTool,
-  selectedToolId,
+  onSelectTrace,
+  selectedTraceId,
 }: {
   run: PipelineRunSummary;
   detail: RunDetail | undefined;
   search: string;
   onSearchChange: (s: string) => void;
-  onSelectTool: (e: AgentWatchEvent) => void;
-  selectedToolId?: string;
+  onSelectTrace: (t: Trace) => void;
+  selectedTraceId?: string;
 }) {
   return (
     <div className={styles.expandedPanel}>
@@ -725,18 +744,18 @@ function ExpandedDetail({
         <div className={styles.expandedSearch}>
           <TextInput
             leadingIcon="🔍"
-            placeholder="Search tool calls…"
+            placeholder="Search traces…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             size="sm"
           />
         </div>
         {detail ? (
-          <ToolCallList
-            events={detail.events}
+          <TraceList
+            traces={detail.traces}
             search={search}
-            onSelect={onSelectTool}
-            selectedId={selectedToolId}
+            onSelect={onSelectTrace}
+            selectedTraceId={selectedTraceId}
           />
         ) : (
           <Skeleton variant="block" height={96} />

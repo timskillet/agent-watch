@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
+import { useDrawerStackRegister } from "./DrawerStack";
 import styles from "./Drawer.module.css";
 
 interface DrawerProps {
@@ -39,6 +40,7 @@ function DrawerInner({
   children,
 }: Omit<DrawerProps, "open">) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const { isTop } = useDrawerStackRegister(true);
 
   // Slide-in: start closed, apply open class after first paint
   useLayoutEffect(() => {
@@ -59,11 +61,11 @@ function DrawerInner({
     };
   }, []);
 
-  // Key handler: Escape closes; Tab traps focus
+  // Key handler: Escape closes the topmost drawer only; Tab traps focus
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        if (isTop) onClose();
         return;
       }
       if (e.key !== "Tab" || !panelRef.current) return;
@@ -86,7 +88,7 @@ function DrawerInner({
 
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [onClose, isTop]);
 
   const resolvedWidth = typeof width === "number" ? `${width}px` : width;
   const generatedId = useId();
