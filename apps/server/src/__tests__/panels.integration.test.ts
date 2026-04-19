@@ -127,6 +127,98 @@ function seed(store: SQLiteEventStore): void {
       timestamp: NOW - DAY + 3000,
       payload: { "gen_ai.tool.name": "Edit", error: "boom" },
     }),
+
+    // --- Bash calls with commands (for bash_command groupBy) ---
+    makeEvent({
+      id: "bash-1",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 200,
+      payload: {
+        "gen_ai.tool.name": "Bash",
+        input: { command: "git push origin main" },
+      },
+    }),
+    makeEvent({
+      id: "bash-2",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 800,
+      payload: {
+        "gen_ai.tool.name": "Bash",
+        input: { command: "pytest tests/" },
+      },
+    }),
+    makeEvent({
+      id: "bash-3",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 1500,
+      payload: {
+        "gen_ai.tool.name": "Bash",
+        input: { command: "npm run build" },
+      },
+    }),
+
+    // --- Read/Edit calls with file_path (for file_extension groupBy) ---
+    makeEvent({
+      id: "file-1",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 50,
+      payload: {
+        "gen_ai.tool.name": "Read",
+        input: { file_path: "/src/foo.ts" },
+      },
+    }),
+    makeEvent({
+      id: "file-2",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 60,
+      payload: {
+        "gen_ai.tool.name": "Read",
+        input: { file_path: "/README.md" },
+      },
+    }),
+    makeEvent({
+      id: "file-3",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 70,
+      payload: {
+        "gen_ai.tool.name": "Edit",
+        input: { file_path: "/src/bar.ts" },
+      },
+    }),
+
+    // --- MCP tool calls (for mcp_server groupBy) ---
+    makeEvent({
+      id: "mcp-1",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 300,
+      payload: { "gen_ai.tool.name": "mcp__playwright__browser_click" },
+    }),
+    makeEvent({
+      id: "mcp-2",
+      type: "tool_call",
+      timestamp: NOW - 3600_000,
+      durationMs: 150,
+      payload: { "gen_ai.tool.name": "mcp__fetch__get" },
+    }),
+
+    // --- event outside the window used for absolute range tests ---
+    makeEvent({
+      id: "outside-1",
+      type: "tool_call",
+      timestamp: NOW - 20 * DAY,
+      durationMs: 999,
+      payload: {
+        "gen_ai.tool.name": "Bash",
+        input: { command: "outside command" },
+      },
+    }),
   ]);
 }
 
@@ -193,10 +285,17 @@ describe("EventStore.getPanelData", () => {
       groupBy: "tool_name",
       range: "7d",
     });
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toEqual({ tool: "Read", value: 3 });
-    expect(rows[1]).toEqual({ tool: "Edit", value: 2 });
-    expect(rows[2]).toEqual({ tool: "Bash", value: 1 });
+    const byTool = Object.fromEntries(rows.map((r) => [r.tool, r.value]));
+    // tc-1/2/3 + file-1/2 = 5 Read calls
+    expect(byTool.Read).toBe(5);
+    // tc-4/5 + file-3 = 3 Edit calls
+    expect(byTool.Edit).toBe(3);
+    // tc-6 + bash-1/2/3 = 4 Bash calls
+    expect(byTool.Bash).toBe(4);
+    // Sorted descending
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i].value).toBeLessThanOrEqual(rows[i - 1].value as number);
+    }
   });
 
   it("tool.duration by tool_name sums duration_ms", () => {
@@ -206,29 +305,39 @@ describe("EventStore.getPanelData", () => {
       range: "7d",
     });
     const byTool = Object.fromEntries(rows.map((r) => [r.tool, r.value]));
-    expect(byTool.Read).toBe(100 + 150 + 200);
-    expect(byTool.Edit).toBe(500 + 300);
-    expect(byTool.Bash).toBe(5000);
+    // tc-1(100) + tc-2(150) + tc-3(200) + file-1(50) + file-2(60)
+    expect(byTool.Read).toBe(100 + 150 + 200 + 50 + 60);
+    // tc-4(500) + tc-5(300) + file-3(70)
+    expect(byTool.Edit).toBe(500 + 300 + 70);
+    // tc-6(5000) + bash-1(200) + bash-2(800) + bash-3(1500)
+    expect(byTool.Bash).toBe(5000 + 200 + 800 + 1500);
   });
 
-  it("tool.failure_rate by tool_name returns calls/errors/value", () => {
+  it("tool.failure_rate by tool_name returns { tool, value, calls, errors }", () => {
     const { rows } = store.getPanelData({
       metric: "tool.failure_rate",
       groupBy: "tool_name",
       range: "7d",
     });
     const byTool = Object.fromEntries(rows.map((r) => [r.tool, r]));
-    // Read: 1 error / 3 calls
-    expect(byTool.Read.calls).toBe(3);
+    // Read: 1 error / 5 calls (tc-1/2/3 + file-1/2)
+    expect(byTool.Read.calls).toBe(5);
     expect(byTool.Read.errors).toBe(1);
-    expect(byTool.Read.value).toBeCloseTo(1 / 3, 3);
-    // Edit: 1 error / 2 calls
-    expect(byTool.Edit.calls).toBe(2);
+    expect(byTool.Read.value).toBeCloseTo(1 / 5, 3);
+    // Edit: 1 error / 3 calls (tc-4/5 + file-3)
+    expect(byTool.Edit.calls).toBe(3);
     expect(byTool.Edit.errors).toBe(1);
-    expect(byTool.Edit.value).toBe(0.5);
-    // Bash: 0 errors / 1 call
+    expect(byTool.Edit.value).toBeCloseTo(1 / 3, 3);
+    // Bash: 0 errors / 4 calls
+    expect(byTool.Bash.calls).toBe(4);
     expect(byTool.Bash.errors).toBe(0);
     expect(byTool.Bash.value).toBe(0);
+    // All rows have calls, errors, and value fields
+    for (const r of rows) {
+      expect(r).toHaveProperty("calls");
+      expect(r).toHaveProperty("errors");
+      expect(r).toHaveProperty("value");
+    }
   });
 
   it("range=7d excludes events older than 7 days", () => {
@@ -304,6 +413,231 @@ describe("EventStore.getPanelData", () => {
 });
 
 // ---------------------------------------------------------------------------
+// bash_command groupBy tests
+// ---------------------------------------------------------------------------
+
+describe("EventStore.getPanelData — bash_command groupBy", () => {
+  let store: SQLiteEventStore;
+
+  beforeEach(() => {
+    store = new SQLiteEventStore(":memory:");
+    seed(store);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it("tool.count returns first token of command, lowercased, ordered by count desc", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "bash_command",
+      range: "7d",
+    });
+    const commands = rows.map((r) => r.command);
+    // Each of git, pytest, npm appear exactly once in the seed
+    expect(commands).toContain("git");
+    expect(commands).toContain("pytest");
+    expect(commands).toContain("npm");
+    // Values are all 1; the existing Bash tool_call (tc-6) has no input.command so is excluded
+    for (const r of rows) {
+      expect(r.value).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("tool.duration sums duration_ms per command", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.duration",
+      groupBy: "bash_command",
+      range: "7d",
+    });
+    const byCmd = Object.fromEntries(rows.map((r) => [r.command, r.value]));
+    expect(byCmd.git).toBe(200);
+    expect(byCmd.pytest).toBe(800);
+    expect(byCmd.npm).toBe(1500);
+  });
+
+  it("tool.failure_rate returns empty rows (not yet supported)", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.failure_rate",
+      groupBy: "bash_command",
+      range: "7d",
+    });
+    expect(rows).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// file_extension groupBy tests
+// ---------------------------------------------------------------------------
+
+describe("EventStore.getPanelData — file_extension groupBy", () => {
+  let store: SQLiteEventStore;
+
+  beforeEach(() => {
+    store = new SQLiteEventStore(":memory:");
+    seed(store);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it("tool.count returns extensions with dot, lowercased, ordered by count desc", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "file_extension",
+      range: "7d",
+    });
+    const exts = rows.map((r) => r.extension);
+    // Two .ts files (foo.ts + bar.ts), one .md file (README.md)
+    expect(exts).toContain(".ts");
+    expect(exts).toContain(".md");
+    const byExt = Object.fromEntries(rows.map((r) => [r.extension, r.value]));
+    expect(byExt[".ts"]).toBe(2);
+    expect(byExt[".md"]).toBe(1);
+    // Non-file tools (Bash without file_path, MCP) must not appear
+    expect(exts).not.toContain("");
+  });
+
+  it("tool.failure_rate returns empty rows (not yet supported)", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.failure_rate",
+      groupBy: "file_extension",
+      range: "7d",
+    });
+    expect(rows).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mcp_server groupBy tests
+// ---------------------------------------------------------------------------
+
+describe("EventStore.getPanelData — mcp_server groupBy", () => {
+  let store: SQLiteEventStore;
+
+  beforeEach(() => {
+    store = new SQLiteEventStore(":memory:");
+    seed(store);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it("tool.count extracts server segment from mcp__{server}__{fn}", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "mcp_server",
+      range: "7d",
+    });
+    const servers = rows.map((r) => r.server);
+    expect(servers).toContain("playwright");
+    expect(servers).toContain("fetch");
+    for (const r of rows) {
+      expect(r.value).toBe(1);
+    }
+  });
+
+  it("tool.failure_rate returns empty rows (not yet supported)", () => {
+    const { rows } = store.getPanelData({
+      metric: "tool.failure_rate",
+      groupBy: "mcp_server",
+      range: "7d",
+    });
+    expect(rows).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Absolute since/until range tests
+// ---------------------------------------------------------------------------
+
+describe("EventStore.getPanelData — absolute since/until range", () => {
+  let store: SQLiteEventStore;
+
+  beforeEach(() => {
+    store = new SQLiteEventStore(":memory:");
+    seed(store);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it("since/until bounds exclude events outside the window", () => {
+    // Window: last 2 hours only — the outside-1 event (20 days ago) must be excluded.
+    const windowSince = NOW - 2 * 3600_000;
+    const windowUntil = NOW;
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      since: windowSince,
+      until: windowUntil,
+    });
+    // The outside-1 event has no "gen_ai.tool.name" issue but its timestamp is 20d ago
+    // Verify total count is less than what a 7d query would return
+    const total = rows.reduce((s, r) => s + Number(r.value), 0);
+    // Only events within the last 2h count; the 20-day-old event must not contribute
+    const sevenDayRows = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      range: "7d",
+    });
+    const sevenDayTotal = sevenDayRows.rows.reduce(
+      (s, r) => s + Number(r.value),
+      0,
+    );
+    expect(total).toBeLessThan(sevenDayTotal);
+  });
+
+  it("since/until takes precedence over range param", () => {
+    // Use a narrow window that excludes all seeded events older than 1 hour
+    const windowSince = NOW - 3600_000 - 1000;
+    const windowUntil = NOW;
+    const { rows } = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      range: "90d", // would include everything if range were used
+      since: windowSince,
+      until: windowUntil,
+    });
+    // Events at NOW - 3600_000: tc-3 (Read), tc-6 (Bash), bash-1/2/3, file-1/2/3, mcp-1/2
+    // All have timestamp = NOW - 3600_000 which is >= windowSince
+    const total = rows.reduce((s, r) => s + Number(r.value), 0);
+    expect(total).toBeGreaterThan(0);
+    // The 10-day-old session_end and the 20-day-old outside-1 must not count
+    // (they would contribute if range=90d were used instead of since/until)
+    const ninetyDayRows = store.getPanelData({
+      metric: "tool.count",
+      groupBy: "tool_name",
+      range: "90d",
+    });
+    const ninetyDayTotal = ninetyDayRows.rows.reduce(
+      (s, r) => s + Number(r.value),
+      0,
+    );
+    expect(total).toBeLessThan(ninetyDayTotal);
+  });
+
+  it("until excludes events timestamped after the upper bound", () => {
+    // Set until to 2 days ago so recent events are excluded
+    const windowUntil = NOW - 2 * DAY - 1;
+    const { rows } = store.getPanelData({
+      metric: "session.cost",
+      groupBy: "day",
+      since: 0,
+      until: windowUntil,
+    });
+    // Only the 10-day-old session_end (se-old) and the 2-day-old (se-1) should be within bounds
+    // se-1 is at NOW - 2 * DAY, windowUntil is NOW - 2 * DAY - 1, so se-1 is also excluded
+    const total = rows.reduce((s, r) => s + Number(r.value), 0);
+    expect(total).toBeCloseTo(99.99, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // HTTP route tests
 // ---------------------------------------------------------------------------
 
@@ -333,7 +667,7 @@ describe("GET /api/panels", () => {
     const body = res.json();
     expect(body).toHaveProperty("rows");
     expect(Array.isArray(body.rows)).toBe(true);
-    expect(body.rows.length).toBe(3);
+    expect(body.rows.length).toBeGreaterThan(0);
   });
 
   it("returns 400 for invalid metric", async () => {

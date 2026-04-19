@@ -1,0 +1,10 @@
+.subText {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.searchInput {
+  width: 100%;
+  margin-bottom: 8px;
+}

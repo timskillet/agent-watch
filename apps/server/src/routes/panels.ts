@@ -16,6 +16,9 @@ const VALID_GROUPBYS = new Set([
   "tool_name",
   "command_prefix",
   "session_tag",
+  "bash_command",
+  "file_extension",
+  "mcp_server",
 ]);
 const VALID_RANGES = new Set(["7d", "30d", "90d"]);
 
@@ -55,6 +58,8 @@ export function registerPanelsRoute(
         metric: metric as PanelQuery["metric"],
         groupBy: groupBy as PanelQuery["groupBy"],
         range: range as PanelQuery["range"],
+        since: toNum(q.since),
+        until: toNum(q.until),
         limit: toNum(q.limit),
       };
       return reply.send(store.getPanelData(query));
