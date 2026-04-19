@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { VirtuosoHandle } from "react-virtuoso";
 import { Virtuoso } from "react-virtuoso";
-import type { AgentWatchEvent, RunDetail } from "@agentwatch/types";
+import type { AgentWatchEvent, RunDetail, Trace } from "@agentwatch/types";
 import { getRunDetail } from "../../api/client";
 import { useSelection } from "../../context/SelectionContext";
+import { buildTraceBars } from "../../lib/buildTraceBars";
 import { deriveToolCallLabel } from "../../lib/deriveToolCallLabel";
 import { pairToolEvents } from "../../lib/pairToolEvents";
 import type { WidgetProps } from "../../widgets/types";
@@ -12,14 +13,16 @@ import { EmptyState } from "../ui/EmptyState";
 import { TextInput } from "../ui/TextInput";
 import { hashToColor, tooltipContentStyle } from "../../charts/theme";
 import { ToolCallDrawer } from "./run-detail/ToolCallDrawer";
+import { TraceDrawer } from "./run-detail/TraceDrawer";
 import styles from "./SessionWaterfallWidget.module.css";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Bar {
   id: string;
-  call: AgentWatchEvent;
+  call?: AgentWatchEvent;
   paired?: AgentWatchEvent;
+  trace?: Trace;
   name: string;
   type: string;
   start: number;
@@ -47,6 +50,7 @@ const TYPE_LABELS: Record<string, string> = {
   tool_error: "Tool call",
   llm_call: "LLM response",
   llm_response: "LLM response",
+  trace: "Trace",
 };
 
 // ── buildBars ─────────────────────────────────────────────────────────────────
@@ -139,6 +143,23 @@ function buildBars(detail: RunDetail): Bar[] {
   // Sort by start time
   bars.sort((a, b) => a.start - b.start);
   return bars;
+}
+
+function buildTraceGroupBars(detail: RunDetail): Bar[] {
+  return buildTraceBars(detail.traces).map((tb) => ({
+    id: tb.id,
+    trace: tb.trace,
+    name: tb.name,
+    type: "trace",
+    start: tb.start,
+    duration: tb.duration,
+    isError: tb.isError,
+    errorMessage:
+      tb.trace.errorCount > 0
+        ? `${tb.trace.errorCount} error${tb.trace.errorCount > 1 ? "s" : ""}`
+        : undefined,
+    isToolBar: false,
+  }));
 }
 
 // ── Tooltip helpers ───────────────────────────────────────────────────────────
@@ -238,11 +259,14 @@ export function SessionWaterfallWidget({
   const [selectedCall, setSelectedCall] = useState<AgentWatchEvent | null>(
     null,
   );
+  const [selectedTrace, setSelectedTrace] = useState<Trace | null>(null);
   const [search, setSearch] = useState("");
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   const viewMode =
     (config.viewMode as "time" | "sequence" | undefined) ?? "time";
+  const grouping =
+    (config.grouping as "event" | "trace" | undefined) ?? "event";
 
   useEffect(() => {
     if (!selectedSessionId) return;
@@ -268,7 +292,12 @@ export function SessionWaterfallWidget({
   const loading =
     selectedSessionId != null && loadedSessionId !== selectedSessionId;
 
-  const bars = useMemo(() => (detail ? buildBars(detail) : []), [detail]);
+  const bars = useMemo(() => {
+    if (!detail) return [];
+    return grouping === "trace"
+      ? buildTraceGroupBars(detail)
+      : buildBars(detail);
+  }, [detail, grouping]);
 
   const visibleBars = useMemo(() => {
     const trimmed = search.trim().toLowerCase();
@@ -353,7 +382,11 @@ export function SessionWaterfallWidget({
     setHover(null);
   }
   function handleBarClick(bar: Bar) {
-    if (bar.isToolBar) {
+    if (bar.trace) {
+      setSelectedTrace(bar.trace);
+      return;
+    }
+    if (bar.isToolBar && bar.call) {
       setSelectedCall(bar.call);
     }
   }
@@ -407,6 +440,22 @@ export function SessionWaterfallWidget({
             onClick={() => onConfigChange({ ...config, viewMode: "sequence" })}
           >
             By sequence
+          </button>
+        </div>
+        <div className={styles.segmented}>
+          <button
+            type="button"
+            className={`${styles.segmentBtn} ${grouping === "event" ? styles.segmentActive : ""}`}
+            onClick={() => onConfigChange({ ...config, grouping: "event" })}
+          >
+            Events
+          </button>
+          <button
+            type="button"
+            className={`${styles.segmentBtn} ${grouping === "trace" ? styles.segmentActive : ""}`}
+            onClick={() => onConfigChange({ ...config, grouping: "trace" })}
+          >
+            Traces
           </button>
         </div>
       </div>
@@ -525,9 +574,20 @@ export function SessionWaterfallWidget({
         </div>
       )}
 
+      {/* Trace drawer (opens when a trace bar is clicked) */}
+      <TraceDrawer
+        trace={selectedTrace}
+        onClose={() => {
+          setSelectedTrace(null);
+          setSelectedCall(null);
+        }}
+        onSelectTool={(event) => setSelectedCall(event)}
+        selectedToolId={selectedCall?.id}
+      />
+
       {/* Tool call drawer */}
       <ToolCallDrawer
-        events={detail.events}
+        events={selectedTrace?.events ?? detail.events}
         selectedEvent={selectedCall}
         onClose={() => setSelectedCall(null)}
       />
