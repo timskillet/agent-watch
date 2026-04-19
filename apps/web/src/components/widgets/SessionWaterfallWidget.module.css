@@ -3,6 +3,64 @@
   font-size: var(--text-sm);
 }
 
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.segmentBtn {
+  padding: 3px 10px;
+  font-size: var(--text-xs);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.segmentBtn + .segmentBtn {
+  border-left: 1px solid var(--color-border);
+}
+.segmentActive {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent, #fff);
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  background: var(--color-error-subtle);
+  color: var(--color-error);
+  font-size: var(--text-xs);
+}
+
+.jumpBtn {
+  background: none;
+  border: 1px solid var(--color-error);
+  border-radius: 3px;
+  color: var(--color-error);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.jumpBtn:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
 .waterfall {
   font-size: var(--text-sm);
 }
@@ -18,7 +76,7 @@
 }
 
 .nameColSpacer {
-  width: 100px;
+  width: 180px;
   flex-shrink: 0;
   padding-right: 8px;
 }
@@ -58,7 +116,7 @@
 }
 
 .nameCol {
-  width: 100px;
+  width: 180px;
   flex-shrink: 0;
   color: var(--color-text-secondary);
   overflow: hidden;
