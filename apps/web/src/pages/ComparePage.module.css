@@ -1,0 +1,131 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.backLink {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--color-text-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.loading,
+.errorState {
+  padding: 24px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.errorState p {
+  margin: 0 0 8px;
+}
+
+/* --- Run cards --- */
+
+.runCards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.runCard {
+  padding: 14px 16px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.runCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.runRole {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.statusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.statusOk {
+  background: var(--color-success);
+}
+
+.statusError {
+  background: var(--color-error);
+}
+
+.statusRunning {
+  background: var(--color-accent);
+}
+
+.runStatus {
+  color: var(--color-text-secondary);
+}
+
+.runId {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.runStats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.runStats dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.runStats dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .runCards {
+    grid-template-columns: 1fr;
+  }
+}
