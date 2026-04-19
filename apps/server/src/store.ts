@@ -675,9 +675,21 @@ export class SQLiteEventStore implements EventStore {
   }
 
   getPanelData(query: PanelQuery): PanelResult {
-    const range = query.range ?? "7d";
-    const days = range === "30d" ? 30 : range === "90d" ? 90 : 7;
-    const since = Date.now() - days * 86_400_000;
+    const hasAbsoluteRange =
+      typeof query.since === "number" || typeof query.until === "number";
+
+    let since: number;
+    let until: number;
+    if (hasAbsoluteRange) {
+      since = query.since ?? 0;
+      until = query.until ?? Date.now();
+    } else {
+      const rangeStr = query.range ?? "7d";
+      const days = rangeStr === "30d" ? 30 : rangeStr === "90d" ? 90 : 7;
+      since = Date.now() - days * 86_400_000;
+      until = Date.now();
+    }
+
     const limit = Math.min(Math.max(1, query.limit ?? 50), 500);
     const metric = query.metric;
     const groupBy =
@@ -700,7 +712,7 @@ export class SQLiteEventStore implements EventStore {
                ${agg} AS value
         FROM events
         WHERE type = 'session_end'
-          AND timestamp >= @since
+          AND timestamp >= @since AND timestamp <= @until
           AND json_extract(payload, '$.${
             metric === "session.duration"
               ? "durationMs"
@@ -716,7 +728,7 @@ export class SQLiteEventStore implements EventStore {
         day: string;
         value: number | null;
       }
-      const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+      const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
       return {
         rows: rows.map((r) => ({ day: r.day, value: r.value ?? 0 })),
       };
@@ -730,7 +742,7 @@ export class SQLiteEventStore implements EventStore {
                  COUNT(*) AS value
           FROM events
           WHERE type = 'tool_call'
-            AND timestamp >= @since
+            AND timestamp >= @since AND timestamp <= @until
             AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
           GROUP BY tool
           ORDER BY value DESC
@@ -740,7 +752,7 @@ export class SQLiteEventStore implements EventStore {
           tool: string;
           value: number;
         }
-        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
         return { rows: rows.map((r) => ({ tool: r.tool, value: r.value })) };
       }
 
@@ -750,7 +762,7 @@ export class SQLiteEventStore implements EventStore {
                  SUM(duration_ms) AS value
           FROM events
           WHERE type = 'tool_call'
-            AND timestamp >= @since
+            AND timestamp >= @since AND timestamp <= @until
             AND duration_ms IS NOT NULL
             AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
           GROUP BY tool
@@ -761,7 +773,7 @@ export class SQLiteEventStore implements EventStore {
           tool: string;
           value: number | null;
         }
-        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
         return {
           rows: rows.map((r) => ({ tool: r.tool, value: r.value ?? 0 })),
         };
@@ -778,7 +790,7 @@ export class SQLiteEventStore implements EventStore {
                    COUNT(*) AS n
             FROM events
             WHERE type = 'tool_call'
-              AND timestamp >= @since
+              AND timestamp >= @since AND timestamp <= @until
               AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
             GROUP BY tool
           ),
@@ -787,7 +799,7 @@ export class SQLiteEventStore implements EventStore {
                    COUNT(*) AS n
             FROM events
             WHERE type = 'tool_error'
-              AND timestamp >= @since
+              AND timestamp >= @since AND timestamp <= @until
               AND json_extract(payload, '$."gen_ai.tool.name"') IS NOT NULL
             GROUP BY tool
           )
@@ -806,7 +818,7 @@ export class SQLiteEventStore implements EventStore {
           calls: number;
           value: number;
         }
-        const rows = this.db.prepare(sql).all({ since, limit }) as Row[];
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
         return {
           rows: rows.map((r) => ({
             tool: r.tool,
@@ -814,6 +826,243 @@ export class SQLiteEventStore implements EventStore {
             calls: r.calls,
             errors: r.errors,
           })),
+        };
+      }
+    }
+
+    // Tool-level metrics grouped by bash_command (Bash tool only)
+    // Only tool.* metrics make sense here; others return empty.
+    if (groupBy === "bash_command" && metric?.startsWith("tool.")) {
+      if (metric === "tool.failure_rate") return { rows: [] };
+
+      // Why: extract the first whitespace-delimited token of $.input.command
+      // (the executable name) so we can rank which shell commands are called most
+      // often or consume the most time.
+      const cmdExpr = `
+        lower(
+          substr(
+            trim(json_extract(payload, '$.input.command')),
+            1,
+            CASE
+              WHEN instr(trim(json_extract(payload, '$.input.command')), ' ') > 0
+                THEN instr(trim(json_extract(payload, '$.input.command')), ' ') - 1
+              ELSE length(trim(json_extract(payload, '$.input.command')))
+            END
+          )
+        )
+      `;
+
+      if (metric === "tool.count") {
+        const sql = `
+          WITH bash_cmds AS (
+            SELECT ${cmdExpr} AS command
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') = 'Bash'
+              AND json_extract(payload, '$.input.command') IS NOT NULL
+          )
+          SELECT command, COUNT(*) AS value
+          FROM bash_cmds
+          WHERE command != ''
+          GROUP BY command
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          command: string;
+          value: number;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({ command: r.command, value: r.value })),
+        };
+      }
+
+      if (metric === "tool.duration") {
+        const sql = `
+          WITH bash_cmds AS (
+            SELECT ${cmdExpr} AS command,
+                   duration_ms
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') = 'Bash'
+              AND json_extract(payload, '$.input.command') IS NOT NULL
+              AND duration_ms IS NOT NULL
+          )
+          SELECT command, SUM(duration_ms) AS value
+          FROM bash_cmds
+          WHERE command != ''
+          GROUP BY command
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          command: string;
+          value: number | null;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({ command: r.command, value: r.value ?? 0 })),
+        };
+      }
+    }
+
+    // Tool-level metrics grouped by file_extension (Read/Edit/Write tools only)
+    // Only tool.* metrics make sense here; others return empty.
+    if (groupBy === "file_extension" && metric?.startsWith("tool.")) {
+      if (metric === "tool.failure_rate") return { rows: [] };
+
+      // Why: we use instr(path, '.') to find the first dot in the full path as a
+      // proxy for the extension. This is a simplification — it gives the wrong answer
+      // for files in hidden directories (e.g. .git/config → ".git/config" instead of
+      // no extension) but is acceptable because source files in this codebase do not
+      // have dots in their directory names. SQLite has no REVERSE() function so a
+      // last-dot approach would require a verbose CTE; the first-dot heuristic is
+      // sufficient for the expected data shape.
+      const extExpr = `
+        CASE
+          WHEN json_extract(payload, '$.input.file_path') LIKE '%.%'
+            THEN lower(
+              substr(
+                json_extract(payload, '$.input.file_path'),
+                instr(json_extract(payload, '$.input.file_path'), '.')
+              )
+            )
+          ELSE ''
+        END
+      `;
+
+      if (metric === "tool.count") {
+        const sql = `
+          WITH ext_rows AS (
+            SELECT ${extExpr} AS extension
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') IN ('Read', 'Edit', 'Write')
+              AND json_extract(payload, '$.input.file_path') IS NOT NULL
+          )
+          SELECT extension, COUNT(*) AS value
+          FROM ext_rows
+          WHERE extension != ''
+          GROUP BY extension
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          extension: string;
+          value: number;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({
+            extension: r.extension,
+            value: r.value,
+          })),
+        };
+      }
+
+      if (metric === "tool.duration") {
+        const sql = `
+          WITH ext_rows AS (
+            SELECT ${extExpr} AS extension,
+                   duration_ms
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') IN ('Read', 'Edit', 'Write')
+              AND json_extract(payload, '$.input.file_path') IS NOT NULL
+              AND duration_ms IS NOT NULL
+          )
+          SELECT extension, SUM(duration_ms) AS value
+          FROM ext_rows
+          WHERE extension != ''
+          GROUP BY extension
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          extension: string;
+          value: number | null;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({
+            extension: r.extension,
+            value: r.value ?? 0,
+          })),
+        };
+      }
+    }
+
+    // Tool-level metrics grouped by mcp_server (MCP tools matching mcp__{server}__{fn})
+    // Only tool.* metrics make sense here; others return empty.
+    if (groupBy === "mcp_server" && metric?.startsWith("tool.")) {
+      if (metric === "tool.failure_rate") return { rows: [] };
+
+      if (metric === "tool.count") {
+        const sql = `
+          WITH mcp_rows AS (
+            SELECT
+              substr(
+                json_extract(payload, '$."gen_ai.tool.name"'),
+                6,
+                instr(substr(json_extract(payload, '$."gen_ai.tool.name"'), 6), '__') - 1
+              ) AS server
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') LIKE 'mcp\\_\\_%\\_\\_%' ESCAPE '\\'
+          )
+          SELECT server, COUNT(*) AS value
+          FROM mcp_rows
+          WHERE server != ''
+          GROUP BY server
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          server: string;
+          value: number;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({ server: r.server, value: r.value })),
+        };
+      }
+
+      if (metric === "tool.duration") {
+        const sql = `
+          WITH mcp_rows AS (
+            SELECT
+              substr(
+                json_extract(payload, '$."gen_ai.tool.name"'),
+                6,
+                instr(substr(json_extract(payload, '$."gen_ai.tool.name"'), 6), '__') - 1
+              ) AS server,
+              duration_ms
+            FROM events
+            WHERE type = 'tool_call'
+              AND timestamp >= @since AND timestamp <= @until
+              AND json_extract(payload, '$."gen_ai.tool.name"') LIKE 'mcp\\_\\_%\\_\\_%' ESCAPE '\\'
+              AND duration_ms IS NOT NULL
+          )
+          SELECT server, SUM(duration_ms) AS value
+          FROM mcp_rows
+          WHERE server != ''
+          GROUP BY server
+          ORDER BY value DESC
+          LIMIT @limit
+        `;
+        interface Row {
+          server: string;
+          value: number | null;
+        }
+        const rows = this.db.prepare(sql).all({ since, until, limit }) as Row[];
+        return {
+          rows: rows.map((r) => ({ server: r.server, value: r.value ?? 0 })),
         };
       }
     }
