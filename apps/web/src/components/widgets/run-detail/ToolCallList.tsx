@@ -3,10 +3,7 @@ import { useMemo } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { hashToColor } from "../../../charts/theme";
 import { deriveToolCallLabel } from "../../../lib/deriveToolCallLabel";
-import {
-  pairToolEvents,
-  type PairedToolCall,
-} from "../../../lib/pairToolEvents";
+import { pairToolEvents } from "../../../lib/pairToolEvents";
 import { EmptyState } from "../../ui/EmptyState";
 import styles from "./ToolCallList.module.css";
 
@@ -29,7 +26,10 @@ function formatDuration(ms?: number): string {
   return `${m}m ${s}s`;
 }
 
-interface RowProps extends PairedToolCall {
+interface RowProps {
+  call: AgentWatchEvent;
+  durationMs?: number;
+  isError: boolean;
   onSelect: (event: AgentWatchEvent) => void;
   selectedId?: string;
 }
@@ -47,6 +47,7 @@ function Row({ call, durationMs, isError, onSelect, selectedId }: RowProps) {
       type="button"
       className={`${styles.row} ${isSelected ? styles.rowSelected : ""}`}
       onClick={() => onSelect(call)}
+      aria-current={isSelected ? "true" : undefined}
     >
       <span className={styles.tag} style={{ background: tagColor }} />
       <span className={styles.body}>
@@ -112,7 +113,9 @@ export function ToolCallList({
         itemContent={(_index, row) => (
           <Row
             key={row.call.id}
-            {...row}
+            call={row.call}
+            durationMs={row.durationMs}
+            isError={row.isError}
             onSelect={onSelect}
             selectedId={selectedId}
           />
@@ -125,7 +128,13 @@ export function ToolCallList({
     <ul className={styles.list}>
       {rows.map((row) => (
         <li key={row.call.id}>
-          <Row {...row} onSelect={onSelect} selectedId={selectedId} />
+          <Row
+            call={row.call}
+            durationMs={row.durationMs}
+            isError={row.isError}
+            onSelect={onSelect}
+            selectedId={selectedId}
+          />
         </li>
       ))}
     </ul>
