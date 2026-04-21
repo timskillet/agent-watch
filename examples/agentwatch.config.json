@@ -1,0 +1,5 @@
+{
+  "project": "my-app",
+  "tags": ["demo", "local"],
+  "capturePromptContent": true
+}
