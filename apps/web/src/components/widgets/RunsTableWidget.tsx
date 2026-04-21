@@ -855,8 +855,8 @@ function ExpandedDetail({
 
 function runLabel(runs: PipelineRunSummary[], pipelineId: string): string {
   const run = runs.find((r) => r.pipelineId === pipelineId);
-  const id = run?.pipelineId ?? pipelineId;
-  const short = id.length > 8 ? `${id.slice(0, 8)}…` : id;
+  const short =
+    pipelineId.length > 8 ? `${pipelineId.slice(0, 8)}…` : pipelineId;
   return run?.pipelineDefinitionId
     ? `${run.pipelineDefinitionId}/${short}`
     : short;

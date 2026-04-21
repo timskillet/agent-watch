@@ -22,6 +22,12 @@ export interface TracePairDrawerProps {
   onClose: () => void;
 }
 
+type SideStatus =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error" }
+  | { kind: "loaded"; detail: RunDetail };
+
 export function TracePairDrawer({
   open,
   pipelineIdA,
@@ -32,40 +38,42 @@ export function TracePairDrawer({
   titleB,
   onClose,
 }: TracePairDrawerProps) {
-  const [detailA, setDetailA] = useState<RunDetail | null>(null);
-  const [detailB, setDetailB] = useState<RunDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [statusA, setStatusA] = useState<SideStatus>({ kind: "idle" });
+  const [statusB, setStatusB] = useState<SideStatus>({ kind: "idle" });
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset + in-flight pattern matches RunsTableWidget; keyed on [open, pipelineIdA, pipelineIdB].
-    setLoading(true);
-    setDetailA(null);
-    setDetailB(null);
-    Promise.all([getRunDetail(pipelineIdA), getRunDetail(pipelineIdB)])
-      .then(([a, b]) => {
+    setStatusA({ kind: "loading" });
+    setStatusB({ kind: "loading" });
+
+    // Load each side independently so a failure on one doesn't hide the other.
+    getRunDetail(pipelineIdA)
+      .then((d) => {
         if (cancelled) return;
-        setDetailA(a);
-        setDetailB(b);
-        setLoading(false);
+        setStatusA(
+          d === null ? { kind: "error" } : { kind: "loaded", detail: d },
+        );
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setStatusA({ kind: "error" });
       });
+    getRunDetail(pipelineIdB)
+      .then((d) => {
+        if (cancelled) return;
+        setStatusB(
+          d === null ? { kind: "error" } : { kind: "loaded", detail: d },
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setStatusB({ kind: "error" });
+      });
+
     return () => {
       cancelled = true;
     };
   }, [open, pipelineIdA, pipelineIdB]);
-
-  const traceA = useMemo(
-    () => findTrace(detailA, traceIdA),
-    [detailA, traceIdA],
-  );
-  const traceB = useMemo(
-    () => findTrace(detailB, traceIdB),
-    [detailB, traceIdB],
-  );
 
   return (
     <Drawer
@@ -75,38 +83,54 @@ export function TracePairDrawer({
       width="min(1180px, calc(100vw - 48px))"
     >
       <div className={styles.columns}>
-        <TraceColumn label={titleA} trace={traceA} loading={loading} />
+        <TraceColumn label={titleA} status={statusA} traceId={traceIdA} />
         <div className={styles.divider} aria-hidden="true" />
-        <TraceColumn label={titleB} trace={traceB} loading={loading} />
+        <TraceColumn label={titleB} status={statusB} traceId={traceIdB} />
       </div>
     </Drawer>
   );
 }
 
-function findTrace(detail: RunDetail | null, traceId?: string): Trace | null {
-  if (detail === null || traceId === undefined) return null;
+function findTrace(detail: RunDetail, traceId?: string): Trace | null {
+  if (traceId === undefined) return null;
   return detail.traces.find((t) => t.traceId === traceId) ?? null;
 }
 
 interface TraceColumnProps {
   label: string;
-  trace: Trace | null;
-  loading: boolean;
+  status: SideStatus;
+  traceId?: string;
 }
 
-function TraceColumn({ label, trace, loading }: TraceColumnProps) {
+function TraceColumn({ label, status, traceId }: TraceColumnProps) {
   return (
     <div className={styles.column}>
       <div className={styles.columnHeader}>{label}</div>
-      {loading ? (
+      {status.kind === "loading" || status.kind === "idle" ? (
         <div className={styles.note}>Loading…</div>
-      ) : trace === null ? (
-        <div className={styles.note}>Not present in this run.</div>
+      ) : status.kind === "error" ? (
+        <div className={styles.error}>
+          Failed to load this run&apos;s detail.
+        </div>
       ) : (
-        <TraceColumnBody trace={trace} />
+        <TraceBodyOrEmpty detail={status.detail} traceId={traceId} />
       )}
     </div>
   );
+}
+
+function TraceBodyOrEmpty({
+  detail,
+  traceId,
+}: {
+  detail: RunDetail;
+  traceId?: string;
+}) {
+  const trace = useMemo(() => findTrace(detail, traceId), [detail, traceId]);
+  if (trace === null) {
+    return <div className={styles.note}>Not present in this run.</div>;
+  }
+  return <TraceColumnBody trace={trace} />;
 }
 
 function TraceColumnBody({ trace }: { trace: Trace }) {
