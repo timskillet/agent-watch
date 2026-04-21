@@ -361,9 +361,60 @@ export interface RunDetail {
   traces: Trace[];
 }
 
+/** @deprecated Use {@link RunComparisonResult}. Kept only for source compatibility until downstream callers migrate. */
 export interface RunComparison {
   a: RunDetail;
   b: RunDetail;
+}
+
+/**
+ * Roll-up of a single run for the compare payload. Excludes `events` and
+ * `traces` to keep the wire shape O(trace count + agent count) rather than
+ * O(event count). Drill-down uses the existing `GET /api/runs/:pipelineId`.
+ */
+export interface RunSummaryForCompare {
+  pipelineId: string;
+  pipelineDefinitionId?: string;
+  projectId?: string;
+  status: RunStatus;
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+  agents: string[];
+  eventCount: number;
+  toolCallCount: number;
+  llmCallCount: number;
+  errorCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost?: number;
+  ingestionSource?: IngestionSource;
+}
+
+/** Per-`agentId` counts/tokens within a single run. */
+export interface AgentRollup {
+  agentId: string;
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+  eventCount: number;
+  toolCallCount: number;
+  llmCallCount: number;
+  errorCount: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** `Trace` without the per-event slice — re-fetched on drill-down. */
+export type TraceRollup = Omit<Trace, "events">;
+
+export interface RunComparisonResult {
+  a: RunSummaryForCompare;
+  b: RunSummaryForCompare;
+  agentsA: AgentRollup[];
+  agentsB: AgentRollup[];
+  tracesA: TraceRollup[];
+  tracesB: TraceRollup[];
 }
 
 export interface PanelQuery {
@@ -409,7 +460,7 @@ export interface EventStore {
     perPipelineLimit: number,
   ): RunDurationTrends;
   getRunDetail(pipelineId: string): RunDetail | null;
-  compareRuns(a: string, b: string): RunComparison | null;
+  compareRuns(a: string, b: string): RunComparisonResult | null;
   getProjectSummaries(): ProjectSummary[];
   getSessionTags(sessionId: string): string[];
   setSessionTags(sessionId: string, tags: string[]): void;

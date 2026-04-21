@@ -9,13 +9,14 @@ import type {
   RunSortKey,
   RunDurationTrends,
   RunDetail,
-  RunComparison,
+  RunComparisonResult,
   ProjectSummary,
   PanelQuery,
   PanelResult,
   EventStore,
 } from "@agentwatch/types";
 import { buildTraces } from "./trace/buildTraces.js";
+import { buildComparison } from "./compare/buildComparison.js";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS events (
@@ -650,11 +651,11 @@ export class SQLiteEventStore implements EventStore {
     };
   }
 
-  compareRuns(a: string, b: string): RunComparison | null {
+  compareRuns(a: string, b: string): RunComparisonResult | null {
     const runA = this.getRunDetail(a);
     const runB = this.getRunDetail(b);
     if (!runA || !runB) return null;
-    return { a: runA, b: runB };
+    return buildComparison(runA, runB);
   }
 
   getProjectSummaries(): ProjectSummary[] {

@@ -553,21 +553,46 @@ describe("EventStore query methods", () => {
   // --- compareRuns ---
 
   describe("compareRuns", () => {
-    it("returns both run details", () => {
+    it("returns compare-shaped payload for both runs", () => {
       const result = store.compareRuns("run-1", "run-2");
       expect(result).not.toBeNull();
       expect(result!.a.pipelineId).toBe("run-1");
       expect(result!.b.pipelineId).toBe("run-2");
+      expect(result!.a.status).toBe("completed");
+      expect(result!.b.status).toBe("failed");
     });
 
     it("returns null if one run does not exist", () => {
       expect(store.compareRuns("run-1", "nonexistent")).toBeNull();
     });
 
-    it("includes events in both runs", () => {
+    it("rolls up tool/LLM/error counts per run", () => {
       const result = store.compareRuns("run-1", "run-2")!;
-      expect(result.a.events.length).toBeGreaterThan(0);
-      expect(result.b.events.length).toBeGreaterThan(0);
+      expect(result.a.toolCallCount).toBe(1);
+      expect(result.a.errorCount).toBe(0);
+      expect(result.b.llmCallCount).toBe(1);
+      expect(result.b.errorCount).toBe(1);
+    });
+
+    it("omits events and per-trace events from the payload", () => {
+      const result = store.compareRuns("run-1", "run-2")!;
+      expect(result.a).not.toHaveProperty("events");
+      expect(result.b).not.toHaveProperty("events");
+      for (const t of result.tracesA) expect(t).not.toHaveProperty("events");
+      for (const t of result.tracesB) expect(t).not.toHaveProperty("events");
+    });
+
+    it("exposes per-agent rollups keyed by agentId", () => {
+      const result = store.compareRuns("run-1", "run-2")!;
+      const agentMain = result.agentsA.find((a) => a.agentId === "agent-main");
+      const agentSub = result.agentsA.find((a) => a.agentId === "agent-sub");
+      expect(agentMain?.eventCount).toBe(3);
+      expect(agentSub?.eventCount).toBe(1);
+    });
+
+    it("surfaces CC session totalCost on the summary", () => {
+      const result = store.compareRuns("run-1", "run-2")!;
+      expect(result.a.cost).toBeCloseTo(0.42);
     });
   });
 
