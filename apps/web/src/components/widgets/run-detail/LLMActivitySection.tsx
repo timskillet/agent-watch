@@ -19,6 +19,10 @@ function spanIdOf(e: AgentWatchEvent): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+function groupKickoffTimestamp(g: LLMGroup): number {
+  return (g.call ?? g.response)?.timestamp ?? 0;
+}
+
 function groupBySpan(events: AgentWatchEvent[]): LLMGroup[] {
   const groups = new Map<string, LLMGroup>();
   const ungrouped: LLMGroup[] = [];
@@ -43,7 +47,9 @@ function groupBySpan(events: AgentWatchEvent[]): LLMGroup[] {
       });
     }
   }
-  return [...groups.values(), ...ungrouped];
+  return [...groups.values(), ...ungrouped].sort(
+    (x, y) => groupKickoffTimestamp(x) - groupKickoffTimestamp(y),
+  );
 }
 
 function tokensOf(e: AgentWatchEvent | undefined): {
