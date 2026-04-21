@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { SQLiteEventStore } from "../store.js";
 import type { ConfigLoader } from "../config/configLoader.js";
+import type { ArrivalLogger } from "./arrivalLogger.js";
 import {
   normalizeHookPayload,
   type ClaudeCodeHookPayload,
@@ -10,6 +11,7 @@ export function registerHooksRoute(
   app: FastifyInstance,
   store: SQLiteEventStore,
   configLoader?: ConfigLoader,
+  arrivalLogger?: ArrivalLogger,
 ): void {
   app.post<{ Body: ClaudeCodeHookPayload }>("/hooks", async (req, reply) => {
     const body = req.body;
@@ -17,6 +19,11 @@ export function registerHooksRoute(
     if (!body || !body.session_id) {
       return reply.status(400).send({ error: "Missing session_id" });
     }
+
+    arrivalLogger?.hook(
+      body.session_id,
+      typeof body.cwd === "string" ? body.cwd : undefined,
+    );
 
     // Pre-warm the per-cwd config cache before the sync normalizer runs.
     // `shouldCapturePromptContent` is sync and reads only the cache, so a

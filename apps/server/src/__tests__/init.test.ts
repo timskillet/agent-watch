@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mergeHookConfig } from "../init.js";
+import { mergeHookConfig, runInit } from "../init.js";
 
 let tmpDir: string;
 
@@ -123,5 +123,41 @@ describe("mergeHookConfig", () => {
     writeFileSync(settingsPath, "{ invalid json");
 
     expect(() => mergeHookConfig(settingsPath)).toThrow();
+  });
+});
+
+describe("runInit output", () => {
+  const originalHome = process.env.HOME;
+
+  beforeEach(() => {
+    process.env.HOME = tmpDir;
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+  });
+
+  it("prints the spec confirmation block including the hook URL and next-steps", () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((msg: unknown) => {
+      logs.push(String(msg));
+    });
+
+    runInit();
+
+    spy.mockRestore();
+
+    const joined = logs.join("\n");
+    expect(logs[0]).toBe(
+      "✓ Wrote Claude Code hook config to ~/.claude/settings.json",
+    );
+    expect(joined).toContain("Hooks configured:");
+    expect(joined).toContain("PreToolUse");
+    expect(joined).toContain("SessionStart");
+    expect(joined).toContain("Target: http://localhost:4318/hooks");
+    expect(joined).toContain("Start the server with: npx agentwatch-dev");
+    expect(joined).toContain(
+      "Then use Claude Code normally — events will appear in the dashboard.",
+    );
   });
 });

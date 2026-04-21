@@ -81,16 +81,14 @@ export function runInit(): void {
 
   mergeHookConfig(settingsPath);
 
-  console.log("AgentWatch hooks written to ~/.claude/settings.json");
+  const hookNames = Object.keys(AGENTWATCH_HOOKS).join(", ");
+
+  console.log("✓ Wrote Claude Code hook config to ~/.claude/settings.json");
+  console.log(`  Hooks configured: ${hookNames}`);
+  console.log(`  Target: ${HOOK_URL}`);
   console.log("");
-  console.log("Registered hooks:");
-  for (const [event, group] of Object.entries(AGENTWATCH_HOOKS)) {
-    const isAsync = group.hooks.some((h) => h.async === true);
-    console.log(`  ${event}${isAsync ? " (async)" : ""}`);
-  }
-  console.log("");
+  console.log("  Start the server with: npx agentwatch-dev");
   console.log(
-    "All new Claude Code sessions will now send telemetry to AgentWatch.",
+    "  Then use Claude Code normally — events will appear in the dashboard.",
   );
-  console.log("Start the server: npx agentwatch-dev");
 }
