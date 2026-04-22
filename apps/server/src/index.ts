@@ -28,10 +28,13 @@ const dbDir = join(home, ".agentwatch");
 mkdirSync(dbDir, { recursive: true });
 const dbPath = join(dbDir, "events.db");
 
-const dashboardPort = parseInt(
+const parsedDashboardPort = parseInt(
   process.env.AGENTWATCH_DASHBOARD_PORT ?? "5173",
   10,
 );
+const dashboardPort = Number.isFinite(parsedDashboardPort)
+  ? parsedDashboardPort
+  : 5173;
 
 const arrivalLogger = createArrivalLogger();
 const { shutdown } = await createServer({ port, dbPath, arrivalLogger });
