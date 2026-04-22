@@ -6,6 +6,7 @@ import type {
   EventLevel,
 } from "@agentwatch/types";
 import type { SQLiteEventStore } from "../store.js";
+import type { ArrivalLogger } from "./arrivalLogger.js";
 import { nextSequence, evictSession } from "./sequence.js";
 
 // ---------------------------------------------------------------------------
@@ -302,6 +303,7 @@ export function normalizeOtelSpan(
 export function registerOtlpRoute(
   app: FastifyInstance,
   store: SQLiteEventStore,
+  arrivalLogger?: ArrivalLogger,
 ): void {
   app.post<{ Body: OtlpExportTraceRequest }>(
     "/v1/traces",
@@ -313,11 +315,25 @@ export function registerOtlpRoute(
       }
 
       const events: AgentWatchEvent[] = [];
+      // Group span counts by service.name for arrival logging.
+      const spansByService = new Map<string, number>();
       for (const rs of body.resourceSpans) {
+        const serviceName =
+          getAttr(rs.resource?.attributes, "service.name") ?? "unknown";
         for (const ss of rs.scopeSpans ?? []) {
           for (const span of ss.spans ?? []) {
             events.push(...normalizeOtelSpan(span, rs.resource));
+            spansByService.set(
+              serviceName,
+              (spansByService.get(serviceName) ?? 0) + 1,
+            );
           }
+        }
+      }
+
+      if (arrivalLogger) {
+        for (const [serviceName, count] of spansByService) {
+          arrivalLogger.otlp(serviceName, count);
         }
       }
 

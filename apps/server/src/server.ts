@@ -9,14 +9,16 @@ import { registerEventsRoute } from "./routes/events.js";
 import { registerRunsRoute } from "./routes/runs.js";
 import { registerProjectsRoute } from "./routes/projects.js";
 import { registerPanelsRoute } from "./routes/panels.js";
+import type { ArrivalLogger } from "./ingest/arrivalLogger.js";
 
 export interface ServerOptions {
   port: number;
   dbPath: string;
+  arrivalLogger?: ArrivalLogger;
 }
 
 export async function createServer(options: ServerOptions) {
-  const { port, dbPath } = options;
+  const { port, dbPath, arrivalLogger } = options;
 
   const store = new SQLiteEventStore(dbPath);
   const configLoader = createConfigLoader(store);
@@ -26,8 +28,8 @@ export async function createServer(options: ServerOptions) {
     origin: ["http://localhost:5173"],
   });
 
-  registerHooksRoute(app, store, configLoader);
-  registerOtlpRoute(app, store);
+  registerHooksRoute(app, store, configLoader, arrivalLogger);
+  registerOtlpRoute(app, store, arrivalLogger);
   registerSessionsRoute(app, store);
   registerEventsRoute(app, store);
   registerRunsRoute(app, store);

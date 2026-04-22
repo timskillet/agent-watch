@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 import { createServer } from "./server.js";
 import { runInit } from "./init.js";
+import { createArrivalLogger } from "./ingest/arrivalLogger.js";
 
 const args = process.argv.slice(2);
 
@@ -27,18 +28,22 @@ const dbDir = join(home, ".agentwatch");
 mkdirSync(dbDir, { recursive: true });
 const dbPath = join(dbDir, "events.db");
 
-const { shutdown } = await createServer({ port, dbPath });
+const parsedDashboardPort = parseInt(
+  process.env.AGENTWATCH_DASHBOARD_PORT ?? "5173",
+  10,
+);
+const dashboardPort = Number.isFinite(parsedDashboardPort)
+  ? parsedDashboardPort
+  : 5173;
 
-console.log("");
-console.log("  AgentWatch Dev Server");
-console.log("  ---------------------");
-console.log(`  Server:    http://localhost:${port}`);
-console.log("  Dashboard: http://localhost:5173");
-console.log(`  Database:  ${dbPath}`);
-console.log("");
-console.log("  Listening for hook events...");
-console.log("  Run 'npx agentwatch-dev init' to configure Claude Code hooks.");
-console.log("");
+const arrivalLogger = createArrivalLogger();
+const { shutdown } = await createServer({ port, dbPath, arrivalLogger });
+
+printStartupBanner({
+  serverUrl: `http://localhost:${port}`,
+  dashboardUrl: `http://localhost:${dashboardPort}`,
+  dbPath,
+});
 
 process.on("SIGINT", async () => {
   console.log("\nShutting down...");
@@ -50,3 +55,38 @@ process.on("SIGTERM", async () => {
   await shutdown();
   process.exit(0);
 });
+
+interface BannerOpts {
+  serverUrl: string;
+  dashboardUrl: string;
+  dbPath: string;
+}
+
+function printStartupBanner(opts: BannerOpts): void {
+  const lines = [
+    "AgentWatch dev server",
+    "",
+    `Server:    ${opts.serverUrl}`,
+    `Dashboard: ${opts.dashboardUrl}`,
+    `Database:  ${opts.dbPath}`,
+    "",
+    "Hooks:     POST /hooks",
+    "OTLP:      POST /v1/traces",
+    "",
+    "Waiting for events...",
+  ];
+
+  const padding = 2;
+  const width = Math.max(...lines.map((l) => l.length)) + padding * 2;
+  const horizontal = "─".repeat(width);
+  const pad = (s: string) =>
+    " ".repeat(padding) + s + " ".repeat(width - s.length - padding);
+
+  console.log("");
+  console.log(`┌${horizontal}┐`);
+  for (const line of lines) {
+    console.log(`│${pad(line)}│`);
+  }
+  console.log(`└${horizontal}┘`);
+  console.log("");
+}

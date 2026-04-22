@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import { SQLiteEventStore } from "../store.js";
 import { registerOtlpRoute } from "../ingest/otlp.js";
 import { registerHooksRoute } from "../ingest/hooks.js";
+import { createArrivalLogger } from "../ingest/arrivalLogger.js";
 import { resetSequences } from "../ingest/sequence.js";
 import { resetNormalizerState } from "../ingest/normalizer.js";
 
@@ -214,5 +215,58 @@ describe("POST /v1/traces", () => {
     // Both requests should have sequence 1 (counter evicted between them)
     expect(events[0].sequence).toBe(1);
     expect(events[1].sequence).toBe(1);
+  });
+
+  it("invokes arrivalLogger once per service.name across multiple requests", async () => {
+    const lines: string[] = [];
+    const arrivalLogger = createArrivalLogger((m) => lines.push(m));
+    const localStore = new SQLiteEventStore(":memory:");
+    const localApp = Fastify();
+    registerOtlpRoute(localApp, localStore, arrivalLogger);
+    await localApp.ready();
+
+    const span = {
+      traceId: "t1",
+      spanId: "s1",
+      name: "gen_ai.chat",
+      startTimeUnixNano: "1700000000000000000",
+      endTimeUnixNano: "1700000001000000000",
+      attributes: [
+        { key: "gen_ai.operation.name", value: { stringValue: "chat" } },
+        {
+          key: "gen_ai.conversation.id",
+          value: { stringValue: "otlp-dedup-sess" },
+        },
+      ],
+    };
+
+    // Two separate requests from the same service.
+    await localApp.inject({
+      method: "POST",
+      url: "/v1/traces",
+      payload: makeOtlpTracePayload([span], "svc-alpha"),
+    });
+    await localApp.inject({
+      method: "POST",
+      url: "/v1/traces",
+      payload: makeOtlpTracePayload([{ ...span, spanId: "s2" }], "svc-alpha"),
+    });
+    // A new service — should log.
+    await localApp.inject({
+      method: "POST",
+      url: "/v1/traces",
+      payload: makeOtlpTracePayload([{ ...span, spanId: "s3" }], "svc-beta"),
+    });
+
+    await localApp.close();
+    localStore.close();
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(
+      '✓ Received OTLP trace from service "svc-alpha" (1 span)',
+    );
+    expect(lines[1]).toBe(
+      '✓ Received OTLP trace from service "svc-beta" (1 span)',
+    );
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import Fastify from "fastify";
 import { SQLiteEventStore } from "../store.js";
 import { registerHooksRoute } from "../ingest/hooks.js";
+import { createArrivalLogger } from "../ingest/arrivalLogger.js";
 import { resetSequences } from "../ingest/sequence.js";
 import { resetNormalizerState } from "../ingest/normalizer.js";
 
@@ -113,5 +114,47 @@ describe("POST /hooks", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it("invokes arrivalLogger once per session across multiple events", async () => {
+    const lines: string[] = [];
+    const arrivalLogger = createArrivalLogger((m) => lines.push(m));
+    const localStore = new SQLiteEventStore(":memory:");
+    const localApp = Fastify();
+    registerHooksRoute(localApp, localStore, undefined, arrivalLogger);
+    await localApp.ready();
+
+    for (const event of ["SessionStart", "PreToolUse", "PostToolUse", "Stop"]) {
+      await localApp.inject({
+        method: "POST",
+        url: "/hooks",
+        payload: {
+          type: event,
+          session_id: "arrival-sess",
+          cwd: "/Users/dev/arrival-proj",
+          tool_name: "Bash",
+          tool_use_id: "tu_x",
+          timestamp: 1700000100000,
+        },
+      });
+    }
+
+    await localApp.inject({
+      method: "POST",
+      url: "/hooks",
+      payload: {
+        type: "SessionStart",
+        session_id: "arrival-sess-b",
+        cwd: "/Users/dev/other",
+      },
+    });
+
+    await localApp.close();
+    localStore.close();
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("session arrival-sess");
+    expect(lines[0]).toContain("project: arrival-proj");
+    expect(lines[1]).toContain("session arrival-sess-b");
   });
 });
