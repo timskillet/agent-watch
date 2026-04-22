@@ -3,6 +3,38 @@
 The `agentwatch` SDK defines the `AgentWatchConfig` shape that
 `agentwatch-dev` reads from each project's `agentwatch.config.json`.
 
+## Config file
+
+The server reads `agentwatch.config.json` from each project's `cwd` at
+runtime:
+
+```json
+{
+  "project": "my-app",
+  "capturePromptContent": true
+}
+```
+
+A fuller reference lives in
+[`examples/agentwatch.config.json`](../../examples/agentwatch.config.json).
+
+### defineConfig (authoring helper)
+
+If you prefer to author the config in TypeScript and emit JSON from it,
+`defineConfig()` is an identity helper that type-checks the object against
+`AgentWatchConfig`:
+
+```ts
+import { defineConfig } from "agentwatch";
+
+export default defineConfig({
+  project: "my-app",
+  capturePromptContent: true,
+});
+```
+
+The runtime itself only reads the JSON form.
+
 ## Privacy — prompt content capture
 
 By default, AgentWatch records only the **length** of each user prompt,

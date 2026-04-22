@@ -1,0 +1,23 @@
+{
+  "name": "agentwatch-examples",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable examples for AgentWatch ingestion. Install and run these from this folder — dependencies are intentionally isolated from the workspace.",
+  "scripts": {
+    "langchain": "tsx langchain-demo.ts",
+    "custom-otel": "tsx custom-otel-agent.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.204.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-node": "^0.204.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/semantic-conventions": "^1.30.0"
+  }
+}
