@@ -84,9 +84,20 @@ privacy model and cache TTL.
 ## Architecture
 
 Events flow `ingest → normalize → SQLite → query API → React dashboard`.
-See [`.obsidian/Architecture.md`](./.obsidian/Architecture.md) for the data
-model, event schema, and the rationale behind the hook + OTLP dual
-ingestion.
+Two ingestion paths feed the same event schema:
+
+- **`POST /hooks`** — Claude Code fires HTTP hooks (registered by
+  `agentwatch-dev init`); `apps/server/src/ingest/normalizer.ts` maps each
+  payload to one or more `AgentWatchEvent`s (`tool_call` / `tool_result`
+  correlated by `tool_use_id`, `session_start` / `session_end`, etc.).
+- **`POST /v1/traces`** — any OpenTelemetry exporter; spans with
+  `gen_ai.*` attributes are translated into the same event types, while
+  unrecognised spans land as generic `trace` events.
+
+The event shape lives in `packages/types/src/index.ts`. Prompt-bounded
+traces (one `UserPromptSubmit` → `Stop` window) are derived on read by
+`apps/server/src/trace/buildTraces.ts` and memoised per `(pipelineId,
+eventCount)`.
 
 ## Development
 
